@@ -197,10 +197,10 @@ If you find MemSyco-Bench helpful, please cite the repository. The paper citatio
 }
 ``` -->
 
-<h2 id="stars">⭐ Stars History</h2>
+<!-- <h2 id="stars">⭐ Stars History</h2>
 
 <div align="center">
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Eric-Xiang-526/Preference-Memory&type=Date)](https://www.star-history.com/#Eric-Xiang-526/Preference-Memory&Date)
 
-</div>
+</div> -->
