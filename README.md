@@ -2,7 +2,7 @@
 
 # MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
 
-[![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/XMUDeepLIT/MemSyco-Bench/LICENSE)
+[![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE)
 
 <p>
   <a href="#about" style="text-decoration: none; font-weight: bold;">📖 About</a> ·
