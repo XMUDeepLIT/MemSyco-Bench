@@ -7,10 +7,10 @@ MemSyco-Bench evaluates whether a memory-augmented agent gives retrieved user me
 | Task | Memory policy | Samples | File |
 | --- | --- | ---: | --- |
 | Objective Fact Judgment | `ignore_as_evidence` | 300 | `objective_fact_judgment.jsonl` |
-| Contextual Scope Limits | `constrain_to_scope` | 300 | `contextual_scope_limits.jsonl` |
-| Preference-Fact Conflict | `defer_to_evidence` | 300 | `preference_fact_conflict.jsonl` |
-| Preference Change | `update` | 350 | `preference_change.jsonl` |
-| Personalized Recommendation | `use` | 300 | `personalized_recommendation.jsonl` |
+| Contextual Scope Control | `constrain_to_scope` | 300 | `contextual_scope_control.jsonl` |
+| Memory-Evidence Conflict | `defer_to_evidence` | 300 | `memory_evidence_conflict.jsonl` |
+| Valid Memory Selection | `update` | 350 | `valid_memory_selection.jsonl` |
+| Personalized Memory Use | `use` | 300 | `personalized_memory_use.jsonl` |
 
 Counts and SHA-256 checksums are recorded in [`manifest.json`](manifest.json). The machine-readable row schema is [`schema.json`](schema.json).
 
@@ -21,7 +21,7 @@ Every JSONL row has the same seven top-level fields:
 ```json
 {
   "id": "emc_search_000001",
-  "task": "preference_fact_conflict",
+  "task": "memory_evidence_conflict",
   "dialogue": [
     {"role": "user", "content": "..."},
     {"role": "assistant", "content": "..."}
@@ -66,8 +66,8 @@ Every JSONL row has the same seven top-level fields:
 ### Memory Status
 
 - `active`: A currently valid memory.
-- `current`: The newer preference in a Preference Change example.
-- `outdated`: The superseded preference in a Preference Change example.
+- `current`: The newer preference in a Valid Memory Selection example.
+- `outdated`: The superseded preference in a Valid Memory Selection example.
 
 ### Memory Policy
 
@@ -85,7 +85,7 @@ The repository includes a dependency-free loader:
 from dataset import load_dataset, task_names
 
 print(task_names())
-examples = load_dataset("preference_change")
+examples = load_dataset("valid_memory_selection")
 print(examples[0]["question"])
 ```
 
@@ -102,6 +102,8 @@ A model under evaluation should receive only the condition-specific context and 
 
 ## Release Notes
 
-Version `1.1` removes legacy multiple-choice fields (`evaluation.options`, `evaluation.gold_option`). All tasks are evaluated as open-ended questions with LLM judges.
+Version `1.2` uses the five canonical task identifiers listed above.
+
+Version `1.1` removes multiple-choice fields (`evaluation.options`, `evaluation.gold_option`). All tasks are evaluated as open-ended questions with LLM judges.
 
 Version `1.0` replaces the previous heterogeneous release layout. Construction-only fields such as dialogue spans, validation flags, duplicated source text, and session-generation metadata were removed. Dialogue turns now use standard lowercase `role` values and content without duplicated `User:` or `Assistant:` prefixes.

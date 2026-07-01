@@ -14,19 +14,11 @@ for path in (REPO_ROOT, SCRIPT_DIR):
         sys.path.insert(0, str(path))
 
 TASK_MODULES = {
-    "personalized_recommendation": "task_personalized_recommendation",
-    "preference_change": "task_preference_change",
-    "preference_fact_conflict": "task_preference_fact_conflict",
-    "contextual_scope_limits": "task_contextual_scope_limits",
+    "personalized_memory_use": "task_personalized_memory_use",
+    "valid_memory_selection": "task_valid_memory_selection",
+    "memory_evidence_conflict": "task_memory_evidence_conflict",
+    "contextual_scope_control": "task_contextual_scope_control",
     "objective_fact_judgment": "task_objective_fact_judgment",
-}
-
-TASK_ALIASES = {
-    "recommend": "personalized_recommendation",
-    "recommend_change": "preference_change",
-    "evidence_memory_conflict_noisy": "preference_fact_conflict",
-    "memory_scope_overgeneralization": "contextual_scope_limits",
-    "consensus_judgment": "objective_fact_judgment",
 }
 
 
@@ -36,13 +28,12 @@ def _usage() -> str:
 
 
 def _load_task(task: str) -> tuple[str, Any]:
-    canonical = TASK_ALIASES.get(task, task)
     try:
-        module_name = TASK_MODULES[canonical]
+        module_name = TASK_MODULES[task]
     except KeyError as exc:
         choices = ", ".join(TASK_MODULES)
         raise SystemExit(f"Unknown task {task!r}. Choose one of: {choices}") from exc
-    return canonical, importlib.import_module(module_name)
+    return task, importlib.import_module(module_name)
 
 
 def _run_optimized(module: Any) -> None:

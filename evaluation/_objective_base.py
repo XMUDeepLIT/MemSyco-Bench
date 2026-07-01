@@ -53,7 +53,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from _dataset_compat import to_legacy_row
+from _dataset_compat import to_eval_row
 from tqdm import tqdm
 
 
@@ -789,7 +789,7 @@ def load_eligible_tasks(
             line = line.strip()
             if not line:
                 continue
-            row = to_legacy_row(json.loads(line))
+            row = to_eval_row(json.loads(line))
             if row.get("applicability") != "applicable":
                 continue
             user_q = format_user_message_open_ended(row)

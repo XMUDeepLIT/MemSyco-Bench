@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run optimized memory-baseline evaluations for recommendation,
-# preference-update, noisy evidence-memory-conflict, memory-scope,
-# and consensus-judgment tasks.
+# Run optimized memory-baseline evaluations for Personalized Memory Use,
+# Valid Memory Selection, Memory-Evidence Conflict, Contextual Scope Control,
+# and Objective Fact Judgment.
 #
 # Examples:
 #   ./scripts/eval_baseline_opt_v2_short.sh
@@ -63,7 +63,7 @@
 
 set -euo pipefail
 
-TASKS=("personalized_recommendation" "preference_change" "preference_fact_conflict" "contextual_scope_limits" "objective_fact_judgment")
+TASKS=("personalized_memory_use" "valid_memory_selection" "memory_evidence_conflict" "contextual_scope_control" "objective_fact_judgment")
 METHODS=("NoMemory" "RawDialogue" "MemZero" "A-MEM" "LightMem" "MemoryBank" "NaiveRAG" "MemGPT" "Supermemory")
 LIMIT=20
 WORKERS=1
@@ -97,7 +97,7 @@ usage() {
   cat <<'EOF'
 
 Options:
-  --tasks personalized_recommendation,preference_change,preference_fact_conflict,contextual_scope_limits,objective_fact_judgment
+  --tasks personalized_memory_use,valid_memory_selection,memory_evidence_conflict,contextual_scope_control,objective_fact_judgment
   --methods NoMemory,RawDialogue,MemZero,A-MEM,LightMem,MemoryBank,NaiveRAG,MemGPT,Supermemory
   --limit N
   --workers N  Accepted for compatibility; optimized evaluators force workers=1.
@@ -110,7 +110,7 @@ Options:
                      Job submission order (default: model).
                      model: iterate model -> task -> method so all tasks for one
                      model can run in parallel and fill --outer-workers.
-                     task: iterate task -> method -> model (legacy order).
+                     task: iterate task -> method -> model (task-first order).
   --memory-top-k N
   --output-root PATH
   --memory-save-root-base PATH
@@ -178,7 +178,7 @@ is_no_memory_method() {
 }
 
 supports_no_memory_task() {
-  [[ "$1" == "objective_fact_judgment" || "$1" == "consensus_judgment" ]]
+  [[ "$1" == "objective_fact_judgment" ]]
 }
 
 is_raw_dialogue_method() {
@@ -200,7 +200,7 @@ memory_store_slot_key() {
 
 raw_dialogue_needs_with_memory_only_flag() {
   case "$1" in
-    objective_fact_judgment|consensus_judgment)
+    objective_fact_judgment)
       return 0
       ;;
     *)
@@ -222,43 +222,43 @@ model_slug() {
 
 task_spec() {
   case "$1" in
-    personalized_recommendation|recommend)
-      TASK_SLUG="recommend"
+    personalized_memory_use)
+      TASK_SLUG="personalized_memory_use"
       SCRIPT_PATH="evaluation/run_task.py"
-      TEST_JSONL="data/personalized_recommendation.jsonl"
-      OUTPUT_SUFFIX="recommend_question_open_results_final.json"
+      TEST_JSONL="data/personalized_memory_use.jsonl"
+      OUTPUT_SUFFIX="personalized_memory_use_open_results_final.json"
       SUPPORTS_NO_QUESTION_FILTER=0
       ;;
-    preference_change|recommend_change)
-      TASK_SLUG="recommend_change"
+    valid_memory_selection)
+      TASK_SLUG="valid_memory_selection"
       SCRIPT_PATH="evaluation/run_task.py"
-      TEST_JSONL="data/preference_change.jsonl"
-      OUTPUT_SUFFIX="preference_update_open_eval_result_final.json"
+      TEST_JSONL="data/valid_memory_selection.jsonl"
+      OUTPUT_SUFFIX="valid_memory_selection_open_eval_result_final.json"
       SUPPORTS_NO_QUESTION_FILTER=0
       ;;
-    preference_fact_conflict|evidence_memory_conflict_noisy)
-      TASK_SLUG="evidence_memory_conflict_noisy"
+    memory_evidence_conflict)
+      TASK_SLUG="memory_evidence_conflict"
       SCRIPT_PATH="evaluation/run_task.py"
-      TEST_JSONL="data/preference_fact_conflict.jsonl"
-      OUTPUT_SUFFIX="evidence_memory_conflict_noisy_results_final.json"
+      TEST_JSONL="data/memory_evidence_conflict.jsonl"
+      OUTPUT_SUFFIX="memory_evidence_conflict_results_final.json"
       SUPPORTS_NO_QUESTION_FILTER=0
       ;;
-    contextual_scope_limits|memory_scope_overgeneralization)
-      TASK_SLUG="memory_scope_overgeneralization"
+    contextual_scope_control)
+      TASK_SLUG="contextual_scope_control"
       SCRIPT_PATH="evaluation/run_task.py"
-      TEST_JSONL="data/contextual_scope_limits.jsonl"
-      OUTPUT_SUFFIX="memory_scope_overgeneralization_v3_results_final.json"
+      TEST_JSONL="data/contextual_scope_control.jsonl"
+      OUTPUT_SUFFIX="contextual_scope_control_results_final.json"
       SUPPORTS_NO_QUESTION_FILTER=0
       ;;
-    objective_fact_judgment|consensus_judgment)
-      TASK_SLUG="consensus_judgment"
+    objective_fact_judgment)
+      TASK_SLUG="objective_fact_judgment"
       SCRIPT_PATH="evaluation/run_task.py"
       TEST_JSONL="data/objective_fact_judgment.jsonl"
-      OUTPUT_SUFFIX="objective_consensus_judgment_results_final.json"
+      OUTPUT_SUFFIX="objective_fact_judgment_results_final.json"
       SUPPORTS_NO_QUESTION_FILTER=0
       ;;
     *)
-      echo "Unsupported task '$1'. Use personalized_recommendation, preference_change, preference_fact_conflict, contextual_scope_limits, objective_fact_judgment." >&2
+      echo "Unsupported task '$1'. Use personalized_memory_use, valid_memory_selection, memory_evidence_conflict, contextual_scope_control, objective_fact_judgment." >&2
       exit 2
       ;;
   esac
@@ -747,7 +747,7 @@ schedule_eval_job() {
   task_spec "$task_name"
 
   if is_no_memory_method "$method" && ! supports_no_memory_task "$task_name"; then
-    echo "Skipping NoMemory for task=$task_name: no-memory is only meaningful for consensus_judgment." >&2
+    echo "Skipping NoMemory for task=$task_name: no-memory is only meaningful for objective_fact_judgment." >&2
     return 0
   fi
 

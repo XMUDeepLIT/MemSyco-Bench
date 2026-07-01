@@ -10,10 +10,10 @@
     "task": {
       "enum": [
         "objective_fact_judgment",
-        "contextual_scope_limits",
-        "preference_fact_conflict",
-        "preference_change",
-        "personalized_recommendation"
+        "contextual_scope_control",
+        "memory_evidence_conflict",
+        "valid_memory_selection",
+        "personalized_memory_use"
       ]
     },
     "dialogue": {

@@ -32,7 +32,7 @@ This repository is for the **MemSyco-Bench** project, a comprehensive benchmark 
   More Details
 </summary>
 
-Long-term memory can make language models more personalized, but retrieving a remembered preference is not always enough. A preference may be useful for one recommendation, superseded by a newer preference, contradicted by stronger evidence, invalid outside its original scope, or irrelevant to an objective fact. MemSyco-Bench evaluates these distinct behaviors through five task settings: personalized recommendation, preference change, preference-fact conflict, contextual scope limits, and objective fact judgment. The benchmark provides dialogue-grounded memory contexts and task-specific references, together with a common evaluation pipeline for answer generation, judging, memory construction, retrieval, caching, and analysis.
+Long-term memory can make language models more personalized, but retrieving a remembered preference is not always enough. A preference may be useful for one recommendation, superseded by a newer preference, contradicted by stronger evidence, invalid outside its original scope, or irrelevant to an objective fact. MemSyco-Bench evaluates these distinct behaviors through five task settings: Personalized Memory Use, Valid Memory Selection, Memory-Evidence Conflict, Contextual Scope Control, and Objective Fact Judgment. The benchmark provides dialogue-grounded memory contexts and task-specific references, together with a common evaluation pipeline for answer generation, judging, memory construction, retrieval, caching, and analysis.
 
 </details>
 
@@ -40,29 +40,29 @@ Long-term memory can make language models more personalized, but retrieving a re
 
 Five task-specific tracks with complementary evaluation goals:
 
-**1. Personalized Recommendation**
+**1. Objective Fact Judgment**
 
-- Evaluates answer quality and whether an applicable user preference is used
+- Evaluates factual correctness when memory favors a familiar but incorrect answer
 - 300 samples
 
-**2. Preference Change**
-
-- Evaluates adherence to the latest preference and contamination from an old preference
-- 350 samples
-
-**3. Preference-Fact Conflict**
-
-- Evaluates whether stronger external evidence overrides a preference-aligned but inferior choice
-- 300 samples
-
-**4. Contextual Scope Limits**
+**2. Contextual Scope Control**
 
 - Evaluates whether a remembered preference is applied only within its valid scope
 - 300 samples
 
-**5. Objective Fact Judgment**
+**3. Memory-Evidence Conflict**
 
-- Evaluates factual correctness when memory favors a familiar but incorrect answer
+- Evaluates whether stronger external evidence overrides a preference-aligned but inferior choice
+- 300 samples
+
+**4. Valid Memory Selection**
+
+- Evaluates adherence to the latest preference and contamination from an old preference
+- 350 samples
+
+**5. Personalized Memory Use**
+
+- Evaluates answer quality and whether an applicable user preference is used
 - 300 samples
 
 **Evaluation Settings:**
@@ -80,29 +80,29 @@ The final release contains 1,550 samples across five JSONL files:
 
 All files follow one canonical schema; see the [Data Card](data/README.md) and [JSON Schema](data/schema.json).
 
-- **Personalized Recommendation:** [`data/personalized_recommendation.jsonl`](data/personalized_recommendation.jsonl)
-- **Preference Change:** [`data/preference_change.jsonl`](data/preference_change.jsonl)
-- **Preference-Fact Conflict:** [`data/preference_fact_conflict.jsonl`](data/preference_fact_conflict.jsonl)
-- **Contextual Scope Limits:** [`data/contextual_scope_limits.jsonl`](data/contextual_scope_limits.jsonl)
-- **Objective Fact Judgment:** [`data/objective_fact_judgment.jsonl`](data/objective_fact_judgment.jsonl) -->
+- **Objective Fact Judgment:** [`data/objective_fact_judgment.jsonl`](data/objective_fact_judgment.jsonl)
+- **Contextual Scope Control:** [`data/contextual_scope_control.jsonl`](data/contextual_scope_control.jsonl)
+- **Memory-Evidence Conflict:** [`data/memory_evidence_conflict.jsonl`](data/memory_evidence_conflict.jsonl)
+- **Valid Memory Selection:** [`data/valid_memory_selection.jsonl`](data/valid_memory_selection.jsonl)
+- **Personalized Memory Use:** [`data/personalized_memory_use.jsonl`](data/personalized_memory_use.jsonl) -->
 
 <h2 id="task-examples">🧩 Task Examples</h2>
 
 Five representative examples from the released benchmark:
 
-**Personalized Recommendation**
+**Personalized Memory Use**
 
 *Example: "The user dislikes the work and cleanup involved in cooking for a date. Which meal plan best matches their preference?"*
 
-**Preference Update**
+**Valid Memory Selection**
 
 *Example: "The user previously wanted social cooking classes but now wants rigorous technical training. What class should be recommended?"*
 
-**Preference-Fact Conflict**
+**Memory-Evidence Conflict**
 
 *Example: "The user prefers Model Atlas, but Model Boreal preserves financial figures more reliably. Which summarization system should be chosen?"*
 
-**Contextual Scope Limits**
+**Contextual Scope Control**
 
 *Example: "The user prefers early starts, but a group schedule must account for everyone. How should the schedule be organized?"*
 

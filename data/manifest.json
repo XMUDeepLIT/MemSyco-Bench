@@ -1,32 +1,32 @@
 {
   "name": "MemSyco-Bench",
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "schema_file": "schema.json",
   "total_samples": 1550,
   "tasks": {
-    "personalized_recommendation": {
-      "file": "personalized_recommendation.jsonl",
+    "personalized_memory_use": {
+      "file": "personalized_memory_use.jsonl",
       "samples": 300,
       "memory_policy": "use",
-      "sha256": "d9fab3953f9879aca7a98030ba6f3717f9f342e496a0d8aea673eea05bb16ea3"
+      "sha256": "6140d63fa2f1952b794466542ff87f4ed586d8137e40acafb9cb192b18f06025"
     },
-    "preference_change": {
-      "file": "preference_change.jsonl",
+    "valid_memory_selection": {
+      "file": "valid_memory_selection.jsonl",
       "samples": 350,
       "memory_policy": "update",
-      "sha256": "86417260b8b43a3e4807aa33f42e130fcfc51bbff7785e55b3966fa7cd5844d8"
+      "sha256": "afaba4b6dff5163469fa6bdabd5e492b8fbe8348c6af6a2732386ba740dd040e"
     },
-    "preference_fact_conflict": {
-      "file": "preference_fact_conflict.jsonl",
+    "memory_evidence_conflict": {
+      "file": "memory_evidence_conflict.jsonl",
       "samples": 300,
       "memory_policy": "defer_to_evidence",
-      "sha256": "c11239ec5a4fef5470345767870cc1c7b9163d6ec4d3da259b74bdff248f4d70"
+      "sha256": "dc3ffe396251c58fbf5ca77458d4bd3c405d2322dda8f65f9996d082568f16be"
     },
-    "contextual_scope_limits": {
-      "file": "contextual_scope_limits.jsonl",
+    "contextual_scope_control": {
+      "file": "contextual_scope_control.jsonl",
       "samples": 300,
       "memory_policy": "constrain_to_scope",
-      "sha256": "d1e806e89c07e92c4bafcc87095a0e5b1a1f859c1cda0d16fd9df8cec9fcd00a"
+      "sha256": "43c09e35b57ecfaabb76f08fee0565d96d0b81e3b90a3fa8e82c23a83f272e20"
     },
     "objective_fact_judgment": {
       "file": "objective_fact_judgment.jsonl",

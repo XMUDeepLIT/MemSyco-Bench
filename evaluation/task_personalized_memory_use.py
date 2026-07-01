@@ -1,7 +1,7 @@
-"""Recommend-question open-ended evaluation (memory-required only).
+"""Personalized Memory Use open-ended evaluation (memory-required only).
 
 This script reads:
-  Preference-Memory/data/personalized_recommendation.jsonl
+  data/personalized_memory_use.jsonl
 
 For each sample, it asks the answer model with prior dialogue context (memory required),
 then uses a judge model to score:
@@ -38,7 +38,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from _dataset_compat import to_legacy_row
+from _dataset_compat import to_eval_row
 from tqdm import tqdm
 
 
@@ -49,9 +49,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
-TEST_JSONL = REPO_ROOT / "data" / "personalized_recommendation.jsonl"
+TEST_JSONL = REPO_ROOT / "data" / "personalized_memory_use.jsonl"
 OUTPUT_RESULTS_JSON = (
-    REPO_ROOT / "output_data" / "current_runs" / "recommend_question_open_results.json"
+    REPO_ROOT / "output_data" / "current_runs" / "personalized_memory_use_open_results.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -130,7 +130,7 @@ Score 1 if the assistant answer clearly uses the preference memory as the core r
 Score 0 if it is generic, unrelated to the memory, or does not reflect the stated preference.
 
 Then compute:
-recommend_pass = true only if answer_accuracy == 1 and preference_used == 1.
+memory_use_pass = true only if answer_accuracy == 1 and preference_used == 1.
 
 Return JSON only.
 
@@ -148,7 +148,7 @@ Output JSON schema:
 {
   "answer_accuracy": 0 | 1,
   "preference_used": 0 | 1,
-  "recommend_pass": true | false,
+  "memory_use_pass": true | false,
   "brief_rationale": "One short sentence explaining the judgment."
 }
 """.strip()
@@ -652,7 +652,7 @@ def judge_answer(
             completion_cache=completion_cache,
             temperature=0.0,
             cache_base_url=cache_base_url,
-            cache_purpose="recommend_judge",
+            cache_purpose="personalized_memory_use_judge",
         )
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
@@ -660,7 +660,7 @@ def judge_answer(
         return {
             "answer_accuracy": None,
             "preference_used": None,
-            "recommend_pass": None,
+            "memory_use_pass": None,
             "brief_rationale": "",
             "judge_raw": "",
             "judge_parse_ok": False,
@@ -670,19 +670,19 @@ def judge_answer(
     parsed = _extract_json_object(raw)
     answer_accuracy: int | None = None
     preference_used: int | None = None
-    recommend_pass: bool | None = None
+    memory_use_pass: bool | None = None
     rationale = ""
 
     if parsed is not None:
         answer_accuracy = _coerce_binary_int(parsed.get("answer_accuracy"))
         preference_used = _coerce_binary_int(parsed.get("preference_used"))
-        rp = parsed.get("recommend_pass")
+        rp = parsed.get("memory_use_pass")
         if isinstance(rp, bool):
-            recommend_pass = rp
+            memory_use_pass = rp
         elif isinstance(rp, str) and rp.strip().lower() in {"true", "false"}:
-            recommend_pass = rp.strip().lower() == "true"
-        if recommend_pass is None and answer_accuracy is not None and preference_used is not None:
-            recommend_pass = answer_accuracy == 1 and preference_used == 1
+            memory_use_pass = rp.strip().lower() == "true"
+        if memory_use_pass is None and answer_accuracy is not None and preference_used is not None:
+            memory_use_pass = answer_accuracy == 1 and preference_used == 1
         br = parsed.get("brief_rationale")
         if isinstance(br, str):
             rationale = br.strip()
@@ -690,13 +690,13 @@ def judge_answer(
     return {
         "answer_accuracy": answer_accuracy,
         "preference_used": preference_used,
-        "recommend_pass": recommend_pass,
+        "memory_use_pass": memory_use_pass,
         "brief_rationale": rationale,
         "judge_raw": raw,
         "judge_parse_ok": parsed is not None
         and answer_accuracy is not None
         and preference_used is not None
-        and recommend_pass is not None,
+        and memory_use_pass is not None,
         "judge_error": None,
     }
 
@@ -710,7 +710,7 @@ def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            row = to_legacy_row(json.loads(line))
+            row = to_eval_row(json.loads(line))
             if row.get("applicability") != "applicable":
                 continue
             if not format_user_message_open_ended(row):
@@ -744,7 +744,7 @@ def empty_answer_block() -> dict[str, Any]:
         "judge": {
             "answer_accuracy": None,
             "preference_used": None,
-            "recommend_pass": None,
+            "memory_use_pass": None,
             "brief_rationale": "",
             "judge_raw": "",
             "judge_parse_ok": False,
@@ -815,7 +815,7 @@ def run_one(
             completion_cache=completion_cache,
             temperature=0.2,
             cache_base_url=answer_base_url,
-            cache_purpose="recommend_answer",
+            cache_purpose="personalized_memory_use_answer",
         )
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
@@ -859,16 +859,16 @@ def aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(valid)
     answer_accuracy = sum(int(j.get("answer_accuracy") == 1) for j in valid)
     preference_used = sum(int(j.get("preference_used") == 1) for j in valid)
-    recommend_pass = sum(int(j.get("recommend_pass") is True) for j in valid)
+    memory_use_pass = sum(int(j.get("memory_use_pass") is True) for j in valid)
     return {
         "with_memory": {
             "n_judged": n,
             "answer_accuracy_avg": answer_accuracy / n if n else 0.0,
             "preference_used_avg": preference_used / n if n else 0.0,
-            "recommend_pass_avg": recommend_pass / n if n else 0.0,
+            "memory_use_pass_avg": memory_use_pass / n if n else 0.0,
             "answer_accuracy_sum": answer_accuracy,
             "preference_used_sum": preference_used,
-            "recommend_pass_sum": recommend_pass,
+            "memory_use_pass_sum": memory_use_pass,
             "judge_parse_failed": len(judges) - n,
             "judge_error_count": sum(1 for j in judges if j.get("judge_error")),
         }
@@ -933,7 +933,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--completion-cache-path",
         type=Path,
-        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/recommend_open.sqlite")),
+        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/personalized_memory_use_open.sqlite")),
         help="SQLite cache for generation and judge completions.",
     )
     parser.add_argument(
@@ -1006,7 +1006,7 @@ def main() -> None:
 
     tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
     if not tasks:
-        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 recommend_question 样本。")
+        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 personalized_memory_use 样本。")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {
@@ -1089,7 +1089,7 @@ def main() -> None:
         for fut in tqdm(
             as_completed(futures),
             total=len(futures),
-            desc=f"recommend question open ({result_setting}+judge)",
+            desc=f"personalized memory use ({result_setting}+judge)",
             unit="条",
         ):
             results[futures[fut]] = fut.result()
@@ -1103,7 +1103,7 @@ def main() -> None:
     cache_meta = completion_cache.stats() if completion_cache is not None else {
         "enabled": False}
     payload = {
-        "task": "recommend_question",
+        "task": "personalized_memory_use",
         "eval_mode": "open_ended_with_memory_only",
         "model": args.model,
         "judge_model": args.judge_model,
@@ -1159,7 +1159,7 @@ def main() -> None:
             print(
                 f"{result_setting}: answer_acc={judge.get('answer_accuracy')} "
                 f"pref_used={judge.get('preference_used')} "
-                f"recommend_pass={judge.get('recommend_pass')}\n{text}"
+                f"memory_use_pass={judge.get('memory_use_pass')}\n{text}"
             )
 
     selected_metrics = metrics[result_setting]
@@ -1167,7 +1167,7 @@ def main() -> None:
         f"完成 {len(final_results)} 条，结果已写入 {args.output}\n"
         f"{result_setting}: answer_acc={selected_metrics['answer_accuracy_avg']:.4f}, "
         f"pref_used={selected_metrics['preference_used_avg']:.4f}, "
-        f"recommend_pass={selected_metrics['recommend_pass_avg']:.4f}"
+        f"memory_use_pass={selected_metrics['memory_use_pass_avg']:.4f}"
     )
 
 

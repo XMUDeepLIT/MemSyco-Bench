@@ -9,18 +9,18 @@ python evaluation/run_task.py TASK [--optimized] [TASK OPTIONS]
 Canonical task names:
 
 ```text
-personalized_recommendation
-preference_change
-preference_fact_conflict
-contextual_scope_limits
 objective_fact_judgment
+contextual_scope_control
+memory_evidence_conflict
+valid_memory_selection
+personalized_memory_use
 ```
 
 Examples:
 
 ```bash
-python evaluation/run_task.py personalized_recommendation --limit 5
-python evaluation/run_task.py preference_fact_conflict --optimized --memory-method MemZero --limit 5
+python evaluation/run_task.py personalized_memory_use --limit 5
+python evaluation/run_task.py memory_evidence_conflict --optimized --memory-method MemZero --limit 5
 python evaluation/run_task.py objective_fact_judgment --help
 ```
 

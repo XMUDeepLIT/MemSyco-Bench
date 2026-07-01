@@ -9,6 +9,14 @@ from typing import Any
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
+TASK_DISPLAY_NAMES = {
+    "objective_fact_judgment": "Objective Fact Judgment",
+    "contextual_scope_control": "Contextual Scope Control",
+    "memory_evidence_conflict": "Memory-Evidence Conflict",
+    "valid_memory_selection": "Valid Memory Selection",
+    "personalized_memory_use": "Personalized Memory Use",
+}
+
 
 def load_manifest(data_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(data_dir) if data_dir is not None else DATA_DIR

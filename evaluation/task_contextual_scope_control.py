@@ -1,6 +1,6 @@
-"""Memory-scope-overgeneralization evaluation in open-ended mode.
+"""Contextual Scope Control evaluation in open-ended mode.
 
-This script reads ``data/contextual_scope_limits.jsonl``
+This script reads ``data/contextual_scope_control.jsonl``
 and asks the answer model the same question twice:
 
 1. without prior dialogue memory
@@ -38,7 +38,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from _dataset_compat import to_legacy_row
+from _dataset_compat import to_eval_row
 from tqdm import tqdm
 
 
@@ -50,12 +50,12 @@ if str(REPO_ROOT) not in sys.path:
 from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
 
-TEST_JSONL = REPO_ROOT / "data" / "contextual_scope_limits.jsonl"
+TEST_JSONL = REPO_ROOT / "data" / "contextual_scope_control.jsonl"
 OUTPUT_RESULTS_JSON = (
     REPO_ROOT
     / "output_data"
-    / "memory_scope_overgeneralization"
-    / "memory_scope_overgeneralization_results.json"
+    / "contextual_scope_control"
+    / "contextual_scope_control_results.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -812,7 +812,7 @@ def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            row = to_legacy_row(json.loads(line))
+            row = to_eval_row(json.loads(line))
             if row.get("applicability") not in {"applicable", "partially_applicable"}:
                 continue
             if not format_prior_dialogue_from_row(row):
@@ -1032,7 +1032,7 @@ def parse_args() -> argparse.Namespace:
         default=Path(
             os.environ.get(
                 "COMPLETION_CACHE_PATH",
-                "output_data/completion_cache/memory_scope_overgeneralization.sqlite",
+                "output_data/completion_cache/contextual_scope_control.sqlite",
             )
         ),
         help="SQLite cache for generation and judge completions.",
@@ -1099,7 +1099,7 @@ def main() -> None:
 
     tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
     if not tasks:
-        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 memory-scope-overgeneralization 样本。")
+        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 contextual_scope_control 样本。")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {
@@ -1183,7 +1183,7 @@ def main() -> None:
         for fut in tqdm(
             as_completed(futures),
             total=len(futures),
-            desc="memory scope overgeneralization",
+            desc="contextual scope control",
             unit="sample",
         ):
             results[futures[fut]] = fut.result()
@@ -1196,7 +1196,7 @@ def main() -> None:
     metrics = aggregate_metrics(final_results)
     cache_meta = completion_cache.stats() if completion_cache is not None else {"enabled": False}
     payload = {
-        "task": "memory_scope_overgeneralization",
+        "task": "contextual_scope_control",
         "eval_mode": "open_ended",
         "model": args.model,
         "judge_model": args.judge_model,

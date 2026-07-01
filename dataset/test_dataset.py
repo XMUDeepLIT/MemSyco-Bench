@@ -16,7 +16,7 @@ REQUIRED_FIELDS = {"id", "task", "dialogue", "question", "memory", "evaluation",
 class DatasetReleaseTest(unittest.TestCase):
     def test_manifest_counts_and_hashes(self) -> None:
         manifest = load_manifest()
-        self.assertEqual(manifest["schema_version"], "1.1")
+        self.assertEqual(manifest["schema_version"], "1.2")
         self.assertEqual(manifest["total_samples"], 1550)
         self.assertEqual(tuple(manifest["tasks"]), task_names())
 

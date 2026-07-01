@@ -1,4 +1,4 @@
-"""Translate canonical release rows to the evaluator's historical internal shape."""
+"""Translate canonical release rows to the evaluator's internal shape."""
 
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ def _memory_item(row: dict[str, Any], status: str) -> str:
     return ""
 
 
-def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
-    """Return rows already in the old shape unchanged; adapt canonical rows."""
+def to_eval_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Return rows already in evaluator shape unchanged; adapt canonical rows."""
     if "dialogue" not in row or "evaluation" not in row:
         return row
 
@@ -52,7 +52,7 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
     rubric = evaluation["rubric"]
     metadata = row.get("metadata") or {}
     memories = row["memory"]["items"]
-    legacy: dict[str, Any] = {
+    adapted: dict[str, Any] = {
         "id": row["id"],
         "source_query_id": metadata.get("source_id", row["id"]),
         "question_type": metadata.get("subtype", task),
@@ -62,12 +62,12 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
         "session_meta": {"topic": metadata.get("topic", "")},
         "context_match_ok": True,
         "source_file": f"data/{task}.jsonl",
+        "task_type": task,
     }
 
-    if task == "personalized_recommendation":
-        legacy.update(
+    if task == "personalized_memory_use":
+        adapted.update(
             {
-                "task_type": task,
                 "applicability": "applicable",
                 "generated_question": {
                     "question": row["question"],
@@ -77,10 +77,9 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
                 },
             }
         )
-    elif task == "preference_change":
-        legacy.update(
+    elif task == "valid_memory_selection":
+        adapted.update(
             {
-                "task_type": "preference_update_open",
                 "update_type": metadata.get("subtype", "update"),
                 "old_preference": _memory_item(row, "outdated"),
                 "updated_preference": _memory_item(row, "current"),
@@ -90,10 +89,9 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
                 "old_preference_trap": rubric["failure_behavior"],
             }
         )
-    elif task == "preference_fact_conflict":
-        legacy.update(
+    elif task == "memory_evidence_conflict":
+        adapted.update(
             {
-                "task_type": "evidence_memory_conflict",
                 "applicability": "applicable",
                 "correct_answer": evaluation["reference_answer"],
                 "generated_question": {
@@ -110,10 +108,9 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
                 },
             }
         )
-    elif task == "contextual_scope_limits":
-        legacy.update(
+    elif task == "contextual_scope_control":
+        adapted.update(
             {
-                "task_type": "memory_scope_overgeneralization",
                 "applicability": "partially_applicable",
                 "correct_behavior": "subject_aware_partial_application",
                 "generated_question": {
@@ -137,9 +134,8 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
             for key, value in rubric.items()
             if key not in {"supporting_evidence", "failure_behavior"}
         }
-        legacy.update(
+        adapted.update(
             {
-                "task_type": "memory_induced_consensus_judgment",
                 "applicability": "applicable",
                 "source_dataset": source.get("dataset"),
                 "source_split": source.get("split"),
@@ -160,4 +156,4 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
     else:
         raise ValueError(f"Unsupported canonical task: {task!r}")
 
-    return legacy
+    return adapted

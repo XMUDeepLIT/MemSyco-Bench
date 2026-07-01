@@ -1,7 +1,7 @@
-"""Preference-update open-ended evaluation.
+"""Valid Memory Selection open-ended evaluation.
 
 This script reads:
-  Preference-Memory/data/preference_change.jsonl
+  data/valid_memory_selection.jsonl
 
 For each sample, it asks the answer model with prior dialogue context by default,
 then uses a judge model to score whether the answer follows updated preference and avoids
@@ -37,7 +37,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from _dataset_compat import to_legacy_row
+from _dataset_compat import to_eval_row
 from tqdm import tqdm
 
 
@@ -48,9 +48,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
-TEST_JSONL = REPO_ROOT / "data" / "preference_change.jsonl"
+TEST_JSONL = REPO_ROOT / "data" / "valid_memory_selection.jsonl"
 OUTPUT_RESULTS_JSON = (
-    REPO_ROOT / "output_data" / "current_runs" / "preference_update_open_eval_result.json"
+    REPO_ROOT / "output_data" / "current_runs" / "valid_memory_selection_open_eval_result.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -141,7 +141,7 @@ If the answer follows the newer preference but briefly acknowledges the older pr
 If the answer is generic and does not use either preference, uses_latest_preference should be 0, but outdated_preference_contamination should be 0.
 
 Then compute:
-update_pass = true only if uses_latest_preference == 1 and outdated_preference_contamination == 0.
+valid_selection_pass = true only if uses_latest_preference == 1 and outdated_preference_contamination == 0.
 
 Return JSON only.
 
@@ -160,7 +160,7 @@ Output JSON schema:
 {
   "uses_latest_preference": 0 | 1,
   "outdated_preference_contamination": 0 | 1,
-  "update_pass": true | false,
+  "valid_selection_pass": true | false,
   "brief_rationale": "One short sentence explaining the judgment."
 }
 """.strip()
@@ -652,7 +652,7 @@ def judge_answer(
             completion_cache=completion_cache,
             temperature=0.0,
             cache_base_url=cache_base_url,
-            cache_purpose="recommend_change_judge",
+            cache_purpose="valid_memory_selection_judge",
         )
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
@@ -660,7 +660,7 @@ def judge_answer(
         return {
             "uses_latest_preference": None,
             "outdated_preference_contamination": None,
-            "update_pass": None,
+            "valid_selection_pass": None,
             "brief_rationale": "",
             "judge_raw": "",
             "judge_parse_ok": False,
@@ -670,20 +670,20 @@ def judge_answer(
     parsed = _extract_json_object(raw)
     uses_latest: int | None = None
     contamination: int | None = None
-    update_pass: bool | None = None
+    valid_selection_pass: bool | None = None
     rationale = ""
 
     if parsed is not None:
         uses_latest = _coerce_binary_int(parsed.get("uses_latest_preference"))
         contamination = _coerce_binary_int(
             parsed.get("outdated_preference_contamination"))
-        up = parsed.get("update_pass")
+        up = parsed.get("valid_selection_pass")
         if isinstance(up, bool):
-            update_pass = up
+            valid_selection_pass = up
         elif isinstance(up, str) and up.strip().lower() in {"true", "false"}:
-            update_pass = up.strip().lower() == "true"
-        if update_pass is None and uses_latest is not None and contamination is not None:
-            update_pass = uses_latest == 1 and contamination == 0
+            valid_selection_pass = up.strip().lower() == "true"
+        if valid_selection_pass is None and uses_latest is not None and contamination is not None:
+            valid_selection_pass = uses_latest == 1 and contamination == 0
         br = parsed.get("brief_rationale")
         if isinstance(br, str):
             rationale = br.strip()
@@ -691,13 +691,13 @@ def judge_answer(
     return {
         "uses_latest_preference": uses_latest,
         "outdated_preference_contamination": contamination,
-        "update_pass": update_pass,
+        "valid_selection_pass": valid_selection_pass,
         "brief_rationale": rationale,
         "judge_raw": raw,
         "judge_parse_ok": parsed is not None
         and uses_latest is not None
         and contamination is not None
-        and update_pass is not None,
+        and valid_selection_pass is not None,
         "judge_error": None,
     }
 
@@ -711,8 +711,8 @@ def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            row = to_legacy_row(json.loads(line))
-            if str(row.get("task_type") or "").strip() != "preference_update_open":
+            row = to_eval_row(json.loads(line))
+            if str(row.get("task_type") or "").strip() != "valid_memory_selection":
                 continue
             if not format_user_message_open_ended(row):
                 continue
@@ -748,7 +748,7 @@ def empty_answer_block() -> dict[str, Any]:
         "judge": {
             "uses_latest_preference": None,
             "outdated_preference_contamination": None,
-            "update_pass": None,
+            "valid_selection_pass": None,
             "brief_rationale": "",
             "judge_raw": "",
             "judge_parse_ok": False,
@@ -818,7 +818,7 @@ def run_one(
             completion_cache=completion_cache,
             temperature=0.2,
             cache_base_url=answer_base_url,
-            cache_purpose="recommend_change_answer",
+            cache_purpose="valid_memory_selection_answer",
         )
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
@@ -862,16 +862,16 @@ def aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     n = len(valid)
     uses_latest = sum(int(j.get("uses_latest_preference") == 1) for j in valid)
     contamination = sum(int(j.get("outdated_preference_contamination") == 1) for j in valid)
-    update_pass = sum(int(j.get("update_pass") is True) for j in valid)
+    valid_selection_pass = sum(int(j.get("valid_selection_pass") is True) for j in valid)
     return {
         "with_memory": {
             "n_judged": n,
             "uses_latest_preference_avg": uses_latest / n if n else 0.0,
             "outdated_preference_contamination_avg": contamination / n if n else 0.0,
-            "update_pass_avg": update_pass / n if n else 0.0,
+            "valid_selection_pass_avg": valid_selection_pass / n if n else 0.0,
             "uses_latest_preference_sum": uses_latest,
             "outdated_preference_contamination_sum": contamination,
-            "update_pass_sum": update_pass,
+            "valid_selection_pass_sum": valid_selection_pass,
             "judge_parse_failed": len(judges) - n,
             "judge_error_count": sum(1 for j in judges if j.get("judge_error")),
         }
@@ -936,7 +936,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--completion-cache-path",
         type=Path,
-        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/recommend_change_open.sqlite")),
+        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/valid_memory_selection_open.sqlite")),
         help="SQLite cache for generation and judge completions.",
     )
     parser.add_argument(
@@ -1010,7 +1010,7 @@ def main() -> None:
     tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
     if not tasks:
         raise RuntimeError(
-            f"{args.test_jsonl} 中没有可评测的 preference_update_open 样本。")
+            f"{args.test_jsonl} 中没有可评测的 valid_memory_selection 样本。")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {
@@ -1112,7 +1112,7 @@ def main() -> None:
     cache_meta = completion_cache.stats() if completion_cache is not None else {
         "enabled": False}
     payload = {
-        "task": "recommend_preference_update",
+        "task": "valid_memory_selection",
         "eval_mode": "open_ended_with_memory_only",
         "model": args.model,
         "judge_model": args.judge_model,
@@ -1169,7 +1169,7 @@ def main() -> None:
             print(
                 f"{result_setting}: uses_latest={judge.get('uses_latest_preference')} "
                 f"outdated_contam={judge.get('outdated_preference_contamination')} "
-                f"update_pass={judge.get('update_pass')}\n{text}"
+                f"valid_selection_pass={judge.get('valid_selection_pass')}\n{text}"
             )
 
     selected_metrics = metrics[result_setting]
@@ -1177,7 +1177,7 @@ def main() -> None:
         f"完成 {len(final_results)} 条，结果已写入 {args.output}\n"
         f"{result_setting}: uses_latest={selected_metrics['uses_latest_preference_avg']:.4f}, "
         f"outdated_contam={selected_metrics['outdated_preference_contamination_avg']:.4f}, "
-        f"update_pass={selected_metrics['update_pass_avg']:.4f}"
+        f"valid_selection_pass={selected_metrics['valid_selection_pass_avg']:.4f}"
     )
 
 

@@ -1,6 +1,6 @@
-"""Evidence-memory-conflict evaluation in open-ended mode.
+"""Memory-Evidence Conflict evaluation in open-ended mode.
 
-This script reads ``data/preference_fact_conflict.jsonl`` and asks the answer
+This script reads ``data/memory_evidence_conflict.jsonl`` and asks the answer
 model with prior dialogue context (memory required), then uses a judge model to
 score accuracy and misled_by_conflicting_memory.
 """
@@ -32,7 +32,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
-from _dataset_compat import to_legacy_row
+from _dataset_compat import to_eval_row
 from tqdm import tqdm
 
 
@@ -44,12 +44,12 @@ if str(REPO_ROOT) not in sys.path:
 from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
 
-TEST_JSONL = REPO_ROOT / "data" / "preference_fact_conflict.jsonl"
+TEST_JSONL = REPO_ROOT / "data" / "memory_evidence_conflict.jsonl"
 OUTPUT_RESULTS_JSON = (
     REPO_ROOT
     / "output_data"
-    / "evidence_memory_conflict_noisy"
-    / "evidence_memory_conflict_noisy_results.json"
+    / "memory_evidence_conflict"
+    / "memory_evidence_conflict_results.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -791,7 +791,7 @@ def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
             line = line.strip()
             if not line:
                 continue
-            row = to_legacy_row(json.loads(line))
+            row = to_eval_row(json.loads(line))
             if row.get("applicability") != "applicable":
                 continue
             if not format_prior_dialogue_from_row(row):
@@ -997,7 +997,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--completion-cache-path",
         type=Path,
-        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/evidence_memory_conflict_noisy.sqlite")),
+        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/memory_evidence_conflict.sqlite")),
         help="SQLite cache for generation and judge completions.",
     )
     parser.add_argument(
@@ -1147,7 +1147,7 @@ def main() -> None:
         for fut in tqdm(
             as_completed(futures),
             total=len(futures),
-            desc="noisy evidence memory conflict",
+            desc="memory evidence conflict",
             unit="sample",
         ):
             results[futures[fut]] = fut.result()
@@ -1160,7 +1160,7 @@ def main() -> None:
     metrics = aggregate_metrics(final_results)
     cache_meta = completion_cache.stats() if completion_cache is not None else {"enabled": False}
     payload = {
-        "task": "evidence_memory_conflict_noisy",
+        "task": "memory_evidence_conflict",
         "eval_mode": "open_ended",
         "model": args.model,
         "judge_model": args.judge_model,
