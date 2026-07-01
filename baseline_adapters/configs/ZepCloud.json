@@ -1,0 +1,7 @@
+{
+  "method": "ZepCloud",
+  "top_k": 10,
+  "save_root": "output_data/baseline_eval_memory",
+  "api_key_env": "ZEP_API_KEY",
+  "base_url_env": "ZEP_CLOUD_BASE_URL"
+}

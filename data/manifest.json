@@ -1,0 +1,38 @@
+{
+  "name": "MemSyco-Bench",
+  "schema_version": "1.0",
+  "schema_file": "schema.json",
+  "total_samples": 1550,
+  "tasks": {
+    "personalized_recommendation": {
+      "file": "personalized_recommendation.jsonl",
+      "samples": 300,
+      "memory_policy": "use",
+      "sha256": "e90405fd7de7b5ecf50ea24af1bc55c4aab0b3b8b0db17a5f630159e387f5d08"
+    },
+    "preference_change": {
+      "file": "preference_change.jsonl",
+      "samples": 350,
+      "memory_policy": "update",
+      "sha256": "12e1440b5e44b6b4670230ad1b5825f1fdee07a34a7823cd85b880fdf54f2aad"
+    },
+    "preference_fact_conflict": {
+      "file": "preference_fact_conflict.jsonl",
+      "samples": 300,
+      "memory_policy": "defer_to_evidence",
+      "sha256": "3812972359ca23368705cff0acda14b57a37d74894a6c860780df47e1aad7702"
+    },
+    "contextual_scope_limits": {
+      "file": "contextual_scope_limits.jsonl",
+      "samples": 300,
+      "memory_policy": "constrain_to_scope",
+      "sha256": "558bc92105cd2b970989df921472336f7b8daab6841ae41373bcfee5525a5abd"
+    },
+    "objective_fact_judgment": {
+      "file": "objective_fact_judgment.jsonl",
+      "samples": 300,
+      "memory_policy": "ignore_as_evidence",
+      "sha256": "e159f88e7349781f73f07216485e124bd855f70cbd6d4351c702ff4bd3bce076"
+    }
+  }
+}

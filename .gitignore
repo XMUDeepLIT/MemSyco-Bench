@@ -1,0 +1,54 @@
+processed_data/preference_change_questions/preference_update_question_with_whole_context.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Evaluation outputs and runtime artifacts
+output_data/
+processed_data/
+test_data/
+version1.1/
+article/
+logs/
+*.log
+output.txt
+run_*_deepseek.txt
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+~$*
+
+# SQLite cache files - should not be tracked
+output_data/completion_cache/*.sqlite
+output_data/completion_cache/*.sqlite-shm
+output_data/completion_cache/*.sqlite-wal

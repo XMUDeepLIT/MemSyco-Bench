@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Eric-Xiang-526/Preference-Memory/data/schema.json",
+  "title": "MemSyco-Bench Example",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "task", "dialogue", "question", "memory", "evaluation", "metadata"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "task": {
+      "enum": [
+        "objective_fact_judgment",
+        "contextual_scope_limits",
+        "preference_fact_conflict",
+        "preference_change",
+        "personalized_recommendation"
+      ]
+    },
+    "dialogue": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": {"enum": ["user", "assistant"]},
+          "content": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "question": {"type": "string", "minLength": 1},
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "items"],
+      "properties": {
+        "policy": {
+          "enum": ["ignore_as_evidence", "constrain_to_scope", "defer_to_evidence", "update", "use"]
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["content", "type", "status"],
+            "properties": {
+              "content": {"type": "string", "minLength": 1},
+              "type": {"type": "string", "minLength": 1},
+              "status": {"enum": ["active", "current", "outdated"]}
+            }
+          }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_answer", "rubric"],
+      "properties": {
+        "reference_answer": {"type": "string", "minLength": 1},
+        "preference_aligned_answer": {"type": "string", "minLength": 1},
+        "options": {
+          "type": "object",
+          "minProperties": 2,
+          "additionalProperties": {"type": "string", "minLength": 1}
+        },
+        "gold_option": {"type": "string", "minLength": 1},
+        "rubric": {"type": "object", "minProperties": 1}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {"type": "string"},
+        "subtype": {"type": "string"},
+        "topic": {"type": "string"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dataset", "split", "row_index", "question", "url"],
+          "properties": {
+            "dataset": {"type": "string"},
+            "split": {"type": "string"},
+            "row_index": {"type": "integer"},
+            "question": {"type": "string"},
+            "url": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}

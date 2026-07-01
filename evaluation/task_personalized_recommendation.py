@@ -1,0 +1,1177 @@
+"""Recommend-question open-ended evaluation (memory-required only).
+
+This script reads:
+  Preference-Memory/data/personalized_recommendation.jsonl
+
+For each sample, it asks the answer model with prior dialogue context (memory required),
+then uses a judge model to score:
+1) answer_accuracy
+2) preference_used
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import random
+import re
+import sqlite3
+import sys
+import threading
+import time
+from collections import deque
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any
+
+
+from openai import (
+
+    APIConnectionError,
+    APIError,
+    APITimeoutError,
+    AuthenticationError,
+    BadRequestError,
+    OpenAI,
+    RateLimitError,
+)
+from _dataset_compat import to_legacy_row
+from tqdm import tqdm
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
+
+TEST_JSONL = REPO_ROOT / "data" / "personalized_recommendation.jsonl"
+OUTPUT_RESULTS_JSON = (
+    REPO_ROOT / "output_data" / "current_runs" / "recommend_question_open_results.json"
+)
+
+DEFAULT_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_JUDGE_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_GENERATION_BASE_URL = (
+    os.environ.get("GENERATION_BASE_URL") or "https://api.deepseek.com"
+)
+DEFAULT_JUDGE_BASE_URL = os.environ.get(
+    "JUDGE_BASE_URL") or "https://api.deepseek.com"
+DEFAULT_GENERATION_API_KEY = (
+    os.environ.get("GENERATION_API_KEY")
+    or os.environ.get("DEEPSEEK_API_KEY")
+    or os.environ.get("API_KEY", "")
+)
+DEFAULT_JUDGE_API_KEY = (
+    os.environ.get("JUDGE_API_KEY")
+    or os.environ.get("DEEPSEEK_JUDGE_API_KEY")
+    or ""
+)
+
+LIMIT = 10000
+WORKERS = 10
+PRINT_EACH_RESULT = False
+ANSWER_PREVIEW_CHARS = 800
+
+DEFAULT_API_MAX_RETRIES = 5
+DEFAULT_API_RETRY_BASE_DELAY_SEC = 1.0
+DEFAULT_API_RETRY_MAX_DELAY_SEC = 60.0
+DEFAULT_REQUEST_TIMEOUT_SEC = 180.0
+DEFAULT_CURRENT_DATE = os.environ.get("EVAL_CURRENT_DATE", "2025-06-01")
+
+_api_retry_log_lock = threading.Lock()
+API_HTTP_TRACE_ENABLED = False
+
+
+ANSWER_SYSTEM_PROMPT_BASE = """system_message:
+role: system
+model: {model_name}
+---
+You are {model_name}, a helpful and natural conversational assistant.
+Knowledge cutoff: 2025-06
+Current date: {current_date}
+
+Answer in a clear, useful, and natural way.
+"""
+
+
+EARLIER_CONVERSATION_BLOCK = """
+
+Earlier conversation:
+{prior_dialogue}
+"""
+
+
+JUDGE_RECOMMEND_PROMPT = """
+You are an impartial evaluator for a recommendation benchmark with user preference memory.
+
+Your task is to judge whether an assistant gave the correct recommendation and whether it actually used the user's preference memory.
+
+You will be given:
+- User preference memory
+- Recommendation question
+- Reference answer
+- Why the reference is correct
+- Preference basis
+- Assistant answer
+
+Evaluate only two things:
+
+1. answer_accuracy
+Score 1 if the assistant answer is semantically consistent with the reference answer and recommendation intent.
+Score 0 if it gives a materially different recommendation, is contradictory, or fails to answer.
+
+2. preference_used
+Score 1 if the assistant answer clearly uses the preference memory as the core reason for the recommendation.
+Score 0 if it is generic, unrelated to the memory, or does not reflect the stated preference.
+
+Then compute:
+recommend_pass = true only if answer_accuracy == 1 and preference_used == 1.
+
+Return JSON only.
+
+Input:
+{
+  "preference_memory": {{preference_memory}},
+  "question": {{question}},
+  "reference_answer": {{reference_answer}},
+  "why_correct": {{why_correct}},
+  "preference_basis": {{preference_basis}},
+  "assistant_answer": {{assistant_answer}}
+}
+
+Output JSON schema:
+{
+  "answer_accuracy": 0 | 1,
+  "preference_used": 0 | 1,
+  "recommend_pass": true | false,
+  "brief_rationale": "One short sentence explaining the judgment."
+}
+""".strip()
+
+
+def _brief_exception_message(exc: BaseException, max_len: int = 220) -> str:
+    msg = f"{type(exc).__name__}: {exc}"
+    msg = " ".join(str(msg).split())
+    if len(msg) > max_len:
+        return msg[: max_len - 3] + "..."
+    return msg
+
+
+def _is_retryable_api_error(exc: BaseException) -> bool:
+    if isinstance(exc, (APIConnectionError, APITimeoutError, RateLimitError)):
+        return True
+    if isinstance(exc, (BadRequestError, AuthenticationError)):
+        return False
+    if isinstance(exc, APIError):
+        code = getattr(exc, "status_code", None)
+        if code == 429:
+            return True
+        if isinstance(code, int) and code >= 500:
+            return True
+        return False
+    return True
+
+
+def format_prior_dialogue_from_row(row: dict[str, Any]) -> str:
+    ctx = row.get("dialogue_context_turns") or []
+    if not isinstance(ctx, list):
+        return ""
+    parts: list[str] = []
+    for turn in ctx:
+        if not isinstance(turn, dict):
+            continue
+        content = (turn.get("content") or "").strip()
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts)
+
+
+def format_memory_prior_dialogue_from_row(row: dict[str, Any]) -> str:
+    ctx = row.get("dialogue_context_turns") or []
+    if not isinstance(ctx, list):
+        return ""
+    parts: list[str] = []
+    for turn in ctx:
+        if not isinstance(turn, dict):
+            continue
+        if turn.get("is_query") is True:
+            break
+        content = (turn.get("content") or "").strip()
+        if content:
+            parts.append(content)
+    return "\n\n".join(parts)
+
+
+def format_user_message_open_ended(row: dict[str, Any]) -> str:
+    gq = row.get("generated_question")
+    if not isinstance(gq, dict):
+        return ""
+    return str(gq.get("question") or "").strip()
+
+
+def reference_answer_from_row(row: dict[str, Any]) -> str:
+    gq = row.get("generated_question")
+    if not isinstance(gq, dict):
+        return str(row.get("correct_answer") or "").strip().upper()
+    opts = gq.get("options") or {}
+    gold = str(row.get("correct_answer") or "").strip().upper()
+    if isinstance(opts, dict) and gold in opts:
+        return str(opts[gold]).strip()
+    return gold
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = re.sub(r"^```\w*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+    match = re.search(r"\{[\s\S]*\}\s*$", t) or re.search(r"\{[\s\S]*\}", t)
+    if not match:
+        return None
+    try:
+        obj = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def _coerce_binary_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int) and value in (0, 1):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in {"0", "false", "no"}:
+            return 0
+        if v in {"1", "true", "yes"}:
+            return 1
+    return None
+
+
+def _cache_completion_key(
+    model_name: str,
+    system: str,
+    user_msg: str,
+    *,
+    base_url: str,
+    purpose: str,
+    temperature: float,
+) -> str:
+    h = hashlib.sha256()
+    h.update(b"completion-cache-v2")
+    h.update(b"\0")
+    h.update(purpose.encode("utf-8"))
+    h.update(b"\0")
+    h.update(base_url.encode("utf-8"))
+    h.update(b"\0")
+    h.update(model_name.encode("utf-8"))
+    h.update(b"\0")
+    h.update(str(float(temperature)).encode("utf-8"))
+    h.update(b"\0")
+    h.update(system.encode("utf-8"))
+    h.update(b"\0")
+    h.update(user_msg.encode("utf-8"))
+    return h.hexdigest()
+
+
+class CompletionCache:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self._store: dict[str, str] = {}
+        self._key_locks: dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+        self._metrics_lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
+        self._disk_hits = 0
+        self._disk_writes = 0
+        self._disk_errors = 0
+        self._db_path = Path(db_path) if db_path is not None else None
+        self._db_lock = threading.Lock()
+        if self._db_path is not None:
+            try:
+                self._init_db()
+            except (OSError, sqlite3.Error) as exc:
+                with self._metrics_lock:
+                    self._disk_errors += 1
+                print(f"[completion-cache] disk cache disabled path={self._db_path}: {exc}", flush=True)
+                self._db_path = None
+
+    def _init_db(self) -> None:
+        assert self._db_path is not None
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self._db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS completions (
+                    cache_key TEXT PRIMARY KEY,
+                    purpose TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    base_url TEXT NOT NULL,
+                    temperature REAL NOT NULL,
+                    system_sha256 TEXT NOT NULL,
+                    user_sha256 TEXT NOT NULL,
+                    response_text TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.commit()
+
+    def _lock_for_key(self, key: str) -> threading.Lock:
+        with self._locks_guard:
+            lock = self._key_locks.get(key)
+            if lock is None:
+                lock = threading.Lock()
+                self._key_locks[key] = lock
+            return lock
+
+    def _disk_get(self, key: str) -> str | None:
+        if self._db_path is None:
+            return None
+        try:
+            with self._db_lock, sqlite3.connect(self._db_path) as conn:
+                row = conn.execute(
+                    "SELECT response_text FROM completions WHERE cache_key = ?",
+                    (key,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            with self._metrics_lock:
+                self._disk_errors += 1
+            print(f"[completion-cache] disk read failed key={key[:12]}: {exc}", flush=True)
+            return None
+        if row is None:
+            return None
+        with self._metrics_lock:
+            self._disk_hits += 1
+        return str(row[0])
+
+    def _disk_set(
+        self,
+        key: str,
+        value: str,
+        *,
+        purpose: str,
+        model_name: str,
+        base_url: str,
+        temperature: float,
+        system: str,
+        user_msg: str,
+    ) -> None:
+        if self._db_path is None:
+            return
+        try:
+            with self._db_lock, sqlite3.connect(self._db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO completions (
+                        cache_key, purpose, model_name, base_url, temperature,
+                        system_sha256, user_sha256, response_text, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        key,
+                        purpose,
+                        model_name,
+                        base_url,
+                        float(temperature),
+                        hashlib.sha256(system.encode("utf-8")).hexdigest(),
+                        hashlib.sha256(user_msg.encode("utf-8")).hexdigest(),
+                        value,
+                        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    ),
+                )
+                conn.commit()
+        except sqlite3.Error as exc:
+            with self._metrics_lock:
+                self._disk_errors += 1
+            print(f"[completion-cache] disk write failed key={key[:12]}: {exc}", flush=True)
+            return
+        with self._metrics_lock:
+            self._disk_writes += 1
+
+    def get_or_compute(
+        self,
+        key: str,
+        compute: Callable[[], str],
+        *,
+        purpose: str,
+        model_name: str,
+        base_url: str,
+        temperature: float,
+        system: str,
+        user_msg: str,
+    ) -> str:
+        lock = self._lock_for_key(key)
+        with lock:
+            if key in self._store:
+                with self._metrics_lock:
+                    self._hits += 1
+                return self._store[key]
+            disk_value = self._disk_get(key)
+            if disk_value is not None:
+                self._store[key] = disk_value
+                with self._metrics_lock:
+                    self._hits += 1
+                print(f"[completion-cache] disk hit purpose={purpose} model={model_name!r} key={key[:12]}", flush=True)
+                return disk_value
+            val = compute()
+            self._store[key] = val
+            self._disk_set(
+                key,
+                val,
+                purpose=purpose,
+                model_name=model_name,
+                base_url=base_url,
+                temperature=temperature,
+                system=system,
+                user_msg=user_msg,
+            )
+            with self._metrics_lock:
+                self._misses += 1
+            print(f"[completion-cache] miss/write purpose={purpose} model={model_name!r} key={key[:12]}", flush=True)
+            return val
+
+    def stats(self) -> dict[str, Any]:
+        with self._metrics_lock:
+            hits, misses = self._hits, self._misses
+            disk_hits, disk_writes, disk_errors = self._disk_hits, self._disk_writes, self._disk_errors
+        with self._locks_guard:
+            keys = len(self._store)
+        return {
+            "enabled": True,
+            "hits": hits,
+            "misses": misses,
+            "distinct_keys": keys,
+            "disk_enabled": self._db_path is not None,
+            "disk_path": str(self._db_path) if self._db_path is not None else None,
+            "disk_hits": disk_hits,
+            "disk_writes": disk_writes,
+            "disk_errors": disk_errors,
+        }
+
+
+class RPMRateLimiter:
+    def __init__(self, max_requests_per_minute: int) -> None:
+        if max_requests_per_minute <= 0:
+            raise ValueError("max_requests_per_minute must be >= 1")
+        self.max_requests_per_minute = int(max_requests_per_minute)
+        self._lock = threading.Lock()
+        self._request_times: deque[float] = deque()
+
+    def acquire(self) -> None:
+        while True:
+            wait_seconds = 0.0
+            now = time.monotonic()
+            with self._lock:
+                while self._request_times and now - self._request_times[0] >= 60.0:
+                    self._request_times.popleft()
+                if len(self._request_times) < self.max_requests_per_minute:
+                    self._request_times.append(now)
+                    return
+                wait_seconds = max(0.0, 60.0 - (now - self._request_times[0]))
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+
+
+def _chat_answer(
+    client: OpenAI,
+    model_name: str,
+    system: str,
+    user_msg: str,
+    *,
+    rpm_limiter: RPMRateLimiter | None = None,
+    max_retries: int = DEFAULT_API_MAX_RETRIES,
+    retry_base_delay_sec: float = DEFAULT_API_RETRY_BASE_DELAY_SEC,
+    retry_max_delay_sec: float = DEFAULT_API_RETRY_MAX_DELAY_SEC,
+    completion_cache: CompletionCache | None = None,
+    temperature: float = 0.2,
+    cache_base_url: str = "",
+    cache_purpose: str = "completion",
+) -> str:
+    if completion_cache is not None:
+        key = _cache_completion_key(
+            model_name,
+            system,
+            user_msg,
+            base_url=cache_base_url,
+            purpose=cache_purpose,
+            temperature=temperature,
+        )
+
+        def _compute() -> str:
+            return _chat_answer(
+                client,
+                model_name,
+                system,
+                user_msg,
+                rpm_limiter=rpm_limiter,
+                max_retries=max_retries,
+                retry_base_delay_sec=retry_base_delay_sec,
+                retry_max_delay_sec=retry_max_delay_sec,
+                completion_cache=None,
+                temperature=temperature,
+                cache_base_url=cache_base_url,
+                cache_purpose=cache_purpose,
+            )
+
+        return completion_cache.get_or_compute(
+            key,
+            _compute,
+            purpose=cache_purpose,
+            model_name=model_name,
+            base_url=cache_base_url,
+            temperature=temperature,
+            system=system,
+            user_msg=user_msg,
+        )
+
+    last_exc: BaseException | None = None
+    for attempt in range(max(1, int(max_retries))):
+        try:
+            if API_HTTP_TRACE_ENABLED:
+                with _api_retry_log_lock:
+                    print(
+                        "[api-req] start "
+                        f"model={model_name!r} "
+                        f"http_try={attempt + 1}/{max_retries} "
+                        f"user_chars={len(user_msg)}",
+                        flush=True,
+                    )
+            if rpm_limiter is not None:
+                rpm_limiter.acquire()
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=temperature,
+                extra_body={
+                    "reasoning": {"enabled": False},
+                    # "thinking": {"type": "disabled"},
+                },
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            if API_HTTP_TRACE_ENABLED:
+                with _api_retry_log_lock:
+                    print(
+                        "[api-req] done "
+                        f"model={model_name!r} "
+                        f"reply_chars={len(text)}",
+                        flush=True,
+                    )
+            return text
+        except BaseException as exc:
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+            last_exc = exc
+            if attempt >= max_retries - 1 or not _is_retryable_api_error(exc):
+                raise
+            delay = float(retry_base_delay_sec) * (2**attempt)
+            delay *= 0.5 + random.random()
+            cap = float(retry_max_delay_sec)
+            if cap > 0.0:
+                delay = min(delay, cap)
+            with _api_retry_log_lock:
+                print(
+                    "[api-retry] "
+                    f"model={model_name!r} "
+                    f"attempt {attempt + 1}/{max_retries} failed "
+                    f"({_brief_exception_message(exc)}); "
+                    f"sleep {delay:.2f}s then retry",
+                    flush=True,
+                )
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
+
+
+def answer_system_prompt(
+    model_name: str,
+    current_date: str,
+    prior_dialogue: str | None,
+    context_label: str = "Earlier conversation",
+) -> str:
+    system = ANSWER_SYSTEM_PROMPT_BASE.format(
+        model_name=model_name,
+        current_date=current_date,
+    )
+    extra_instruction = os.environ.get("ANSWER_SYSTEM_EXTRA_INSTRUCTION", "").strip()
+    if extra_instruction:
+        system += f"\n\nAdditional instruction:\n{extra_instruction}\n"
+    if prior_dialogue is not None:
+        system += f"\n\n{context_label}:\n{prior_dialogue}\n"
+    return system.strip()
+
+
+def judge_user_payload(row: dict[str, Any], assistant_answer: str) -> str:
+    gq = row.get("generated_question") if isinstance(
+        row.get("generated_question"), dict) else {}
+    gq = row.get("generated_question") if isinstance(
+        row.get("generated_question"), dict) else {}
+    payload = {
+        "preference_memory": (row.get("extraction") or {}).get("memories") or [],
+        "question": format_user_message_open_ended(row),
+        "reference_answer": reference_answer_from_row(row),
+        "why_correct": str(gq.get("why_correct") or "").strip() if isinstance(gq, dict) else "",
+        "preference_basis": str(gq.get("preference_basis") or "").strip() if isinstance(gq, dict) else "",
+        "assistant_answer": (assistant_answer or "").strip(),
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def judge_answer(
+    client: OpenAI,
+    judge_model: str,
+    row: dict[str, Any],
+    assistant_answer: str,
+    *,
+    rpm_limiter: RPMRateLimiter | None = None,
+    max_retries: int = DEFAULT_API_MAX_RETRIES,
+    retry_base_delay_sec: float = DEFAULT_API_RETRY_BASE_DELAY_SEC,
+    retry_max_delay_sec: float = DEFAULT_API_RETRY_MAX_DELAY_SEC,
+    completion_cache: CompletionCache | None = None,
+    cache_base_url: str = "",
+) -> dict[str, Any]:
+    user_msg = judge_user_payload(row, assistant_answer)
+    try:
+        raw = _chat_answer(
+            client,
+            judge_model,
+            JUDGE_RECOMMEND_PROMPT,
+            user_msg,
+            rpm_limiter=rpm_limiter,
+            max_retries=max_retries,
+            retry_base_delay_sec=retry_base_delay_sec,
+            retry_max_delay_sec=retry_max_delay_sec,
+            completion_cache=completion_cache,
+            temperature=0.0,
+            cache_base_url=cache_base_url,
+            cache_purpose="recommend_judge",
+        )
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return {
+            "answer_accuracy": None,
+            "preference_used": None,
+            "recommend_pass": None,
+            "brief_rationale": "",
+            "judge_raw": "",
+            "judge_parse_ok": False,
+            "judge_error": f"{type(exc).__name__}: {exc}",
+        }
+
+    parsed = _extract_json_object(raw)
+    answer_accuracy: int | None = None
+    preference_used: int | None = None
+    recommend_pass: bool | None = None
+    rationale = ""
+
+    if parsed is not None:
+        answer_accuracy = _coerce_binary_int(parsed.get("answer_accuracy"))
+        preference_used = _coerce_binary_int(parsed.get("preference_used"))
+        rp = parsed.get("recommend_pass")
+        if isinstance(rp, bool):
+            recommend_pass = rp
+        elif isinstance(rp, str) and rp.strip().lower() in {"true", "false"}:
+            recommend_pass = rp.strip().lower() == "true"
+        if recommend_pass is None and answer_accuracy is not None and preference_used is not None:
+            recommend_pass = answer_accuracy == 1 and preference_used == 1
+        br = parsed.get("brief_rationale")
+        if isinstance(br, str):
+            rationale = br.strip()
+
+    return {
+        "answer_accuracy": answer_accuracy,
+        "preference_used": preference_used,
+        "recommend_pass": recommend_pass,
+        "brief_rationale": rationale,
+        "judge_raw": raw,
+        "judge_parse_ok": parsed is not None
+        and answer_accuracy is not None
+        and preference_used is not None
+        and recommend_pass is not None,
+        "judge_error": None,
+    }
+
+
+def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            if len(tasks) >= limit:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            row = to_legacy_row(json.loads(line))
+            if row.get("applicability") != "applicable":
+                continue
+            if not format_user_message_open_ended(row):
+                continue
+            if not format_prior_dialogue_from_row(row):
+                continue
+            memories = ((row.get("extraction") or {}).get("memories") or [])
+            if not isinstance(memories, list) or not memories:
+                continue
+            if not reference_answer_from_row(row):
+                continue
+            tasks.append(row)
+    return tasks
+
+
+def base_result_for_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row.get("id"),
+        "source_query_id": row.get("source_query_id"),
+        "question_type": row.get("question_type"),
+        "user_question": format_user_message_open_ended(row),
+        "reference_answer": reference_answer_from_row(row),
+        "preference_memory": ((row.get("extraction") or {}).get("memories") or []),
+        "preference_basis": ((row.get("generated_question") or {}).get("preference_basis")),
+    }
+
+
+def empty_answer_block() -> dict[str, Any]:
+    return {
+        "answer_text": "",
+        "judge": {
+            "answer_accuracy": None,
+            "preference_used": None,
+            "recommend_pass": None,
+            "brief_rationale": "",
+            "judge_raw": "",
+            "judge_parse_ok": False,
+            "judge_error": None,
+        },
+    }
+
+
+def run_one(
+    answer_client: OpenAI,
+    judge_client: OpenAI,
+    model_name: str,
+    judge_model: str,
+    current_date: str,
+    row: dict[str, Any],
+    *,
+    answer_rpm_limiter: RPMRateLimiter | None = None,
+    judge_rpm_limiter: RPMRateLimiter | None = None,
+    max_retries: int = DEFAULT_API_MAX_RETRIES,
+    retry_base_delay_sec: float = DEFAULT_API_RETRY_BASE_DELAY_SEC,
+    retry_max_delay_sec: float = DEFAULT_API_RETRY_MAX_DELAY_SEC,
+    completion_cache: CompletionCache | None = None,
+    memory_eval_config: BaselineEvalConfig | None = None,
+    answer_base_url: str = "",
+    judge_base_url: str = "",
+) -> dict[str, Any]:
+    prior = format_prior_dialogue_from_row(row)
+    user_msg = format_user_message_open_ended(row)
+    lightmem_meta: dict[str, Any] | None = None
+    if memory_eval_config is not None:
+        memory_prior = format_memory_prior_dialogue_from_row(row)
+        lightmem_ctx = build_baseline_context(
+            memory_prior,
+            user_msg,
+            memory_eval_config,
+            sample_key=row.get("id") or row.get(
+                "source_query_id") or row.get("sample_index"),
+        )
+        system_with_memory = answer_system_prompt(
+            model_name,
+            current_date,
+            prior_dialogue=lightmem_ctx.context_text,
+            context_label="Retrieved memories from earlier conversation",
+        )
+        lightmem_meta = {
+            "method": lightmem_ctx.method,
+            "top_k": lightmem_ctx.top_k,
+            "user_id": lightmem_ctx.user_id,
+            "save_dir": lightmem_ctx.save_dir,
+            "retrieved_memories": lightmem_ctx.retrieved_memories,
+        }
+        result_setting = "with_memory"
+    else:
+        system_with_memory = answer_system_prompt(
+            model_name, current_date, prior_dialogue=prior)
+        result_setting = "with_memory"
+
+    try:
+        answer_text = _chat_answer(
+            answer_client,
+            model_name,
+            system_with_memory,
+            user_msg,
+            rpm_limiter=answer_rpm_limiter,
+            max_retries=max_retries,
+            retry_base_delay_sec=retry_base_delay_sec,
+            retry_max_delay_sec=retry_max_delay_sec,
+            completion_cache=completion_cache,
+            temperature=0.2,
+            cache_base_url=answer_base_url,
+            cache_purpose="recommend_answer",
+        )
+    except BaseException as exc:
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return base_result_for_row(row) | {
+            "api_error": f"{type(exc).__name__}: {exc}",
+            result_setting: empty_answer_block(),
+        }
+
+    judge = judge_answer(
+        judge_client,
+        judge_model,
+        row,
+        answer_text,
+        rpm_limiter=judge_rpm_limiter,
+        max_retries=max_retries,
+        retry_base_delay_sec=retry_base_delay_sec,
+        retry_max_delay_sec=retry_max_delay_sec,
+        completion_cache=completion_cache,
+        cache_base_url=judge_base_url,
+    )
+
+    result = base_result_for_row(row) | {
+        result_setting: {
+            "answer_text": answer_text,
+            "judge": judge,
+        }
+    }
+    if lightmem_meta is not None:
+        result["lightmem"] = lightmem_meta
+    return result
+
+
+def aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    judges = [
+        ((r.get("with_memory") or {}).get("judge") or {})
+        for r in results
+        if not r.get("api_error") and r.get("with_memory")
+    ]
+    valid = [j for j in judges if j.get("judge_parse_ok") is True]
+    n = len(valid)
+    answer_accuracy = sum(int(j.get("answer_accuracy") == 1) for j in valid)
+    preference_used = sum(int(j.get("preference_used") == 1) for j in valid)
+    recommend_pass = sum(int(j.get("recommend_pass") is True) for j in valid)
+    return {
+        "with_memory": {
+            "n_judged": n,
+            "answer_accuracy_avg": answer_accuracy / n if n else 0.0,
+            "preference_used_avg": preference_used / n if n else 0.0,
+            "recommend_pass_avg": recommend_pass / n if n else 0.0,
+            "answer_accuracy_sum": answer_accuracy,
+            "preference_used_sum": preference_used,
+            "recommend_pass_sum": recommend_pass,
+            "judge_parse_failed": len(judges) - n,
+            "judge_error_count": sum(1 for j in judges if j.get("judge_error")),
+        }
+    }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--test-jsonl", type=Path, default=TEST_JSONL)
+    parser.add_argument("--output", type=Path, default=OUTPUT_RESULTS_JSON)
+    parser.add_argument("--model", default=DEFAULT_MODEL_NAME)
+    parser.add_argument(
+        "--base-url",
+        default=DEFAULT_GENERATION_BASE_URL,
+        help="generation model 的 OpenAI 兼容 base_url。",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=DEFAULT_GENERATION_API_KEY,
+        help="generation model 的 API key，默认读 GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。",
+    )
+    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL_NAME)
+    parser.add_argument(
+        "--judge-base-url",
+        default=DEFAULT_JUDGE_BASE_URL,
+        help="judge model 的 OpenAI 兼容 base_url，默认读 JUDGE_BASE_URL。",
+    )
+    parser.add_argument(
+        "--judge-api-key",
+        default=DEFAULT_JUDGE_API_KEY,
+        help="judge model 的 API key，默认读 JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。",
+    )
+    parser.add_argument(
+        "--judge-request-timeout",
+        type=float,
+        default=None,
+        help="judge model 单次 HTTP 请求超时秒数；默认沿用 --request-timeout。",
+    )
+    parser.add_argument("--limit", type=int, default=LIMIT)
+    parser.add_argument("--workers", type=int, default=WORKERS)
+    parser.add_argument("--max-requests-per-minute", type=int, default=0)
+    parser.add_argument(
+        "--judge-max-requests-per-minute",
+        type=int,
+        default=None,
+        help="judge model 每分钟最多请求数；默认沿用 --max-requests-per-minute。",
+    )
+    parser.add_argument("--api-max-retries", type=int,
+                        default=DEFAULT_API_MAX_RETRIES)
+    parser.add_argument("--api-retry-base-delay", type=float,
+                        default=DEFAULT_API_RETRY_BASE_DELAY_SEC)
+    parser.add_argument("--api-retry-max-delay", type=float,
+                        default=DEFAULT_API_RETRY_MAX_DELAY_SEC)
+    parser.add_argument("--request-timeout", type=float,
+                        default=DEFAULT_REQUEST_TIMEOUT_SEC)
+    parser.add_argument(
+        "--current-date",
+        default=DEFAULT_CURRENT_DATE,
+        help="Stable date inserted into answer system prompts. Defaults to EVAL_CURRENT_DATE or 2025-06-01.",
+    )
+    parser.add_argument("--no-completion-cache", action="store_true")
+    parser.add_argument(
+        "--completion-cache-path",
+        type=Path,
+        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/recommend_open.sqlite")),
+        help="SQLite cache for generation and judge completions.",
+    )
+    parser.add_argument(
+        "--no-disk-completion-cache",
+        action="store_true",
+        help="Keep the per-process completion cache but disable SQLite persistence.",
+    )
+    parser.add_argument(
+        "--memory-method",
+        choices=BASELINE_METHODS,
+        default=None,
+        help="Enable a LightMem memory layer for the with_memory branch.",
+    )
+    parser.add_argument("--memory-top-k", type=int, default=None)
+    parser.add_argument("--memory-baseline-config", type=Path, default=None)
+    parser.add_argument("--memory-config", type=Path, default=None)
+    parser.add_argument(
+        "--memory-save-root",
+        type=Path,
+        default=None,
+    )
+    parser.add_argument("--memory-api-key",
+                        default=os.environ.get("MEMORY_API_KEY", ""))
+    parser.add_argument("--memory-base-url",
+                        default=os.environ.get("MEMORY_BASE_URL", ""))
+    parser.add_argument("--memory-llm-model", default="")
+    parser.add_argument("--print-each-result",
+                        action="store_true", default=PRINT_EACH_RESULT)
+    parser.add_argument("--answer-preview-chars", type=int,
+                        default=ANSWER_PREVIEW_CHARS)
+    parser.add_argument(
+        "--trace-api",
+        action="store_true",
+        help="打印 [api-req] start/done：用于确认请求已发出、仍在等 HTTP 响应。",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    global API_HTTP_TRACE_ENABLED
+    args = parse_args()
+    API_HTTP_TRACE_ENABLED = bool(args.trace_api)
+
+    api_key = (args.api_key or "").strip()
+    judge_api_key = (args.judge_api_key or "").strip()
+    judge_base_url = args.judge_base_url
+    judge_request_timeout = (
+        float(args.judge_request_timeout)
+        if args.judge_request_timeout is not None
+        else float(args.request_timeout)
+    )
+    judge_max_requests_per_minute = (
+        int(args.judge_max_requests_per_minute)
+        if args.judge_max_requests_per_minute is not None
+        else int(args.max_requests_per_minute)
+    )
+
+    if not api_key:
+        raise RuntimeError(
+            "请通过 --api-key 传入 generation API key，或设置 "
+            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
+        )
+    if not judge_api_key:
+        raise RuntimeError(
+            "请通过 --judge-api-key 传入 judge API key，或设置 "
+            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
+        )
+    if not args.test_jsonl.is_file():
+        raise FileNotFoundError(args.test_jsonl)
+
+    tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
+    if not tasks:
+        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 recommend_question 样本。")
+
+    request_timeout = float(args.request_timeout)
+    client_kwargs: dict[str, Any] = {
+        "base_url": args.base_url, "api_key": api_key}
+    if request_timeout > 0:
+        client_kwargs["timeout"] = request_timeout
+    answer_client = OpenAI(**client_kwargs)
+
+    judge_client_kwargs: dict[str, Any] = {
+        "base_url": judge_base_url,
+        "api_key": judge_api_key,
+    }
+    if judge_request_timeout > 0:
+        judge_client_kwargs["timeout"] = judge_request_timeout
+    judge_client = OpenAI(**judge_client_kwargs)
+
+    answer_rpm_limiter = (
+        RPMRateLimiter(int(args.max_requests_per_minute))
+        if int(args.max_requests_per_minute) > 0
+        else None
+    )
+    judge_rpm_limiter = (
+        RPMRateLimiter(judge_max_requests_per_minute)
+        if judge_max_requests_per_minute > 0
+        else None
+    )
+    completion_cache = (
+        None
+        if args.no_completion_cache
+        else CompletionCache(None if args.no_disk_completion_cache else args.completion_cache_path)
+    )
+    current_date = str(args.current_date).strip() or DEFAULT_CURRENT_DATE
+    memory_eval_config = (
+        build_baseline_eval_config(
+            method=args.memory_method,
+            baseline_config_path=args.memory_baseline_config,
+            top_k=(int(args.memory_top_k)
+                   if args.memory_top_k is not None else None),
+            config_path=args.memory_config,
+            save_root=args.memory_save_root,
+            api_key=(args.memory_api_key or None),
+            base_url=(args.memory_base_url or None),
+            llm_model=(args.memory_llm_model or None),
+        )
+        if args.memory_method
+        else None
+    )
+
+    def _job(row: dict[str, Any]) -> dict[str, Any]:
+        return run_one(
+            answer_client,
+            judge_client,
+            args.model,
+            args.judge_model,
+            current_date,
+            row,
+            answer_rpm_limiter=answer_rpm_limiter,
+            judge_rpm_limiter=judge_rpm_limiter,
+            max_retries=max(1, int(args.api_max_retries)),
+            retry_base_delay_sec=max(0.0, float(args.api_retry_base_delay)),
+            retry_max_delay_sec=max(0.0, float(args.api_retry_max_delay)),
+            completion_cache=completion_cache,
+            memory_eval_config=memory_eval_config,
+            answer_base_url=args.base_url,
+            judge_base_url=judge_base_url,
+        )
+
+    results: list[dict[str, Any] | None] = [None] * len(tasks)
+    n_workers = max(1, int(args.workers))
+    result_setting = "with_memory"
+    print(
+        f"已启动 {len(tasks)} 条任务，线程池并发 {n_workers}。"
+        f" 每条样本调用：答题({result_setting}) -> 裁判；"
+        " 首条完成前进度条可能停在 0%，并非卡死。",
+        flush=True,
+    )
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {pool.submit(_job, row): idx for idx,
+                   row in enumerate(tasks)}
+        for fut in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"recommend question open ({result_setting}+judge)",
+            unit="条",
+        ):
+            results[futures[fut]] = fut.result()
+
+    final_results: list[dict[str, Any]] = []
+    for result in results:
+        assert result is not None
+        final_results.append(result)
+
+    metrics = aggregate_metrics(final_results)
+    cache_meta = completion_cache.stats() if completion_cache is not None else {
+        "enabled": False}
+    payload = {
+        "task": "recommend_question",
+        "eval_mode": "open_ended_with_memory_only",
+        "model": args.model,
+        "judge_model": args.judge_model,
+        "base_url": args.base_url,
+        "judge_base_url": judge_base_url,
+        "generation_setting": {
+            "model": args.model,
+            "base_url": args.base_url,
+            "request_timeout_sec": request_timeout if request_timeout > 0 else None,
+            "max_requests_per_minute": max(0, int(args.max_requests_per_minute)),
+        },
+        "judge_setting": {
+            "model": args.judge_model,
+            "base_url": judge_base_url,
+            "request_timeout_sec": judge_request_timeout if judge_request_timeout > 0 else None,
+            "max_requests_per_minute": max(0, judge_max_requests_per_minute),
+        },
+        "test_jsonl": str(args.test_jsonl),
+        "n_samples": len(final_results),
+        "metrics": metrics,
+        "workers": max(1, int(args.workers)),
+        "max_requests_per_minute": max(0, int(args.max_requests_per_minute)),
+        "judge_max_requests_per_minute": max(0, judge_max_requests_per_minute),
+        "api_max_retries": max(1, int(args.api_max_retries)),
+        "api_retry_base_delay_sec": max(0.0, float(args.api_retry_base_delay)),
+        "api_retry_max_delay_sec": max(0.0, float(args.api_retry_max_delay)),
+        "request_timeout_sec": request_timeout if request_timeout > 0 else None,
+        "judge_request_timeout_sec": judge_request_timeout if judge_request_timeout > 0 else None,
+        "current_date": current_date,
+        "answer_system_extra_instruction": os.environ.get("ANSWER_SYSTEM_EXTRA_INSTRUCTION", "").strip(),
+        "completion_cache": cache_meta,
+        "memory_method": args.memory_method,
+        "memory_top_k": int(args.memory_top_k) if args.memory_method else None,
+        "memory_config": str(args.memory_config) if args.memory_config else None,
+        "n_api_failed_samples": sum(1 for r in final_results if r.get("api_error")),
+        "results": final_results,
+    }
+
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with args.output.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    if args.print_each_result:
+        preview = max(0, int(args.answer_preview_chars))
+        for result in final_results:
+            print("---")
+            print(f"id={result.get('id')} question={result.get('user_question')}")
+            block = result.get(result_setting) or {}
+            judge = block.get("judge") or {}
+            text = block.get("answer_text") or ""
+            if preview and len(text) > preview:
+                text = text[:preview] + "..."
+            print(
+                f"{result_setting}: answer_acc={judge.get('answer_accuracy')} "
+                f"pref_used={judge.get('preference_used')} "
+                f"recommend_pass={judge.get('recommend_pass')}\n{text}"
+            )
+
+    selected_metrics = metrics[result_setting]
+    print(
+        f"完成 {len(final_results)} 条，结果已写入 {args.output}\n"
+        f"{result_setting}: answer_acc={selected_metrics['answer_accuracy_avg']:.4f}, "
+        f"pref_used={selected_metrics['preference_used_avg']:.4f}, "
+        f"recommend_pass={selected_metrics['recommend_pass_avg']:.4f}"
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,15 @@
+{
+  "method": "MemZeroGraph",
+  "top_k": 10,
+  "config_path": "methods/LightMem/src/lightmem/memory_toolkits/configs/MemZeroGraph.json",
+  "save_root": "output_data/baseline_eval_memory",
+  "api_key_env": "MEMORY_API_KEY",
+  "base_url_env": "MEMORY_BASE_URL",
+  "llm_model_env": "MEMORY_LLM_MODEL",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_model_env": "MEMORY_EMBEDDING_MODEL",
+  "embedding_dims": 384,
+  "embedding_dims_env": "MEMORY_EMBEDDING_DIMS",
+  "embedding_api_key_env": "MEMORY_EMBEDDING_API_KEY",
+  "embedding_base_url_env": "MEMORY_EMBEDDING_BASE_URL"
+}
