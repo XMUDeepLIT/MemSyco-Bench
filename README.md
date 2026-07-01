@@ -2,7 +2,7 @@
 
 # MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
 
-<!-- [![Static Badge](https://img.shields.io/badge/github-Preference--Memory-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Eric-Xiang-526/Preference-Memory)  [![Static Badge](https://img.shields.io/badge/dataset-1%2C550_samples-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](#benchmark-tasks)  [![Static Badge](https://img.shields.io/badge/tasks-5-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](#leaderboards)  [![Static Badge](https://img.shields.io/badge/API-OpenAI_compatible-teal?style=for-the-badge&labelColor=000)](#api-configuration) -->
+[![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/GraphRAG-Bench/GraphRAG-Benchmark/blob/main/LICENSE)
 
 <p>
   <a href="#about" style="text-decoration: none; font-weight: bold;">📖 About</a> ·
