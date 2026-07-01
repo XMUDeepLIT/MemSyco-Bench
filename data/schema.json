@@ -61,12 +61,6 @@
       "properties": {
         "reference_answer": {"type": "string", "minLength": 1},
         "preference_aligned_answer": {"type": "string", "minLength": 1},
-        "options": {
-          "type": "object",
-          "minProperties": 2,
-          "additionalProperties": {"type": "string", "minLength": 1}
-        },
-        "gold_option": {"type": "string", "minLength": 1},
         "rubric": {"type": "object", "minProperties": 1}
       }
     },

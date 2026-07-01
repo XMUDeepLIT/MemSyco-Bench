@@ -216,13 +216,11 @@ def format_user_message_open_ended(row: dict[str, Any]) -> str:
 
 def reference_answer_from_row(row: dict[str, Any]) -> str:
     gq = row.get("generated_question")
-    if not isinstance(gq, dict):
-        return str(row.get("correct_answer") or "").strip().upper()
-    opts = gq.get("options") or {}
-    gold = str(row.get("correct_answer") or "").strip().upper()
-    if isinstance(opts, dict) and gold in opts:
-        return str(opts[gold]).strip()
-    return gold
+    if isinstance(gq, dict):
+        ref = (gq.get("reference_answer") or "").strip()
+        if ref:
+            return ref
+    return str(row.get("reference_answer") or "").strip()
 
 
 def _extract_json_object(text: str) -> dict[str, Any] | None:

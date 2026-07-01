@@ -14,7 +14,7 @@ from .common import jsonable_memories, parse_dialogue_to_messages, retry_embeddi
 
 
 # ---------------------------------------------------------------------------
-# MemGPTMinimal baseline adapter —— 从零复刻 MemGPT 的「记忆机制」。
+# MemGPT baseline adapter — lightweight re-implementation of the MemGPT memory mechanism.
 #
 # 不依赖 vendored `methods/letta`（那是 13.8 万行的商业 agent 平台，要求 Python>=3.11，
 # 在 pre-mem/Python 3.10 里装不上）。这里只忠实复刻 MemGPT 论文的核心思想：
@@ -30,7 +30,7 @@ from .common import jsonable_memories, parse_dialogue_to_messages, retry_embeddi
 # 落盘缓存、后续同一对话的不同问题复用。运行依赖只有 openai + numpy（pre-mem 已有）。
 # ---------------------------------------------------------------------------
 
-METHOD = "MemGPTMinimal"
+METHOD = "MemGPT"
 
 DEFAULT_LLM_MODEL = "deepseek-v4-flash"
 DEFAULT_EMBEDDING_MODEL = "bge-m3"
@@ -45,7 +45,7 @@ LLM_MAX_TOKENS = 4096
 LLM_TEMPERATURE = 0.7
 
 _CACHE_VERSION = 1
-_COMPLETE_MARKER = ".memgpt_minimal_complete.json"
+_COMPLETE_MARKER = ".memgpt_complete.json"
 
 _cache_guard = threading.Lock()
 _inproc_cache: dict[str, "_MemoryIndex"] = {}

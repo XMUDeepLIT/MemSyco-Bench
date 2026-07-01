@@ -11,10 +11,6 @@ Usage:
 
     # a single method
     python -m baseline_adapters.smoke_test --method MemoryBank
-    python -m baseline_adapters.smoke_test --method Letta
-
-    # point Letta at a specific server (otherwise LETTA_BASE_URL / localhost:8283)
-    LETTA_BASE_URL=http://127.0.0.1:8283 python -m baseline_adapters.smoke_test --method Letta
 
 Exit codes:
     0  every selected smoke test passed (or was skipped because its service was
@@ -27,8 +23,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -40,10 +34,9 @@ from baseline_adapters import (  # noqa: E402
     build_baseline_context,
     build_baseline_eval_config,
 )
-from baseline_adapters import letta as letta_adapter  # noqa: E402
 
 
-SUPPORTED_METHODS = ("MemoryBank", "Letta")
+SUPPORTED_METHODS = ("MemoryBank",)
 
 # A tiny but information-rich dialogue so retrieval has something to find.
 PRIOR_DIALOGUE = (
@@ -106,59 +99,8 @@ def smoke_memorybank(args: argparse.Namespace) -> SmokeResult:
     return _check_context(method, ctx)
 
 
-def _letta_server_reachable(base_url: str, timeout: float = 5.0) -> tuple[bool, str]:
-    url = f"{base_url}/v1/health/"
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310
-            return (200 <= resp.status < 500, f"{url} -> HTTP {resp.status}")
-    except urllib.error.HTTPError as exc:
-        # Any HTTP response (even 404) proves the server is up and listening.
-        return (True, f"{url} -> HTTP {exc.code}")
-    except urllib.error.URLError as exc:
-        return (False, f"{url} unreachable: {exc.reason}")
-    except Exception as exc:  # noqa: BLE001
-        return (False, f"{url} probe error: {exc}")
-
-
-def smoke_letta(args: argparse.Namespace) -> SmokeResult:
-    method = "Letta"
-    eval_config = build_baseline_eval_config(
-        method=method,
-        top_k=args.top_k,
-        api_key=args.api_key or None,
-        base_url=args.base_url or None,
-    )
-    # The Letta server URL is resolved purely from Letta-specific settings; it is
-    # deliberately decoupled from MEMORY_BASE_URL (the LLM provider endpoint).
-    base_url = letta_adapter._resolve_base_url(eval_config)  # noqa: SLF001
-    reachable, info = _letta_server_reachable(base_url)
-    if not reachable:
-        msg = (
-            f"Letta server not reachable ({info}). Start it with `letta server` and/or set "
-            f"LETTA_BASE_URL. Resolved base_url={base_url}"
-        )
-        if args.strict:
-            return SmokeResult(method, SmokeResult.FAIL, msg)
-        return SmokeResult(method, SmokeResult.SKIP, msg)
-
-    try:
-        ctx = build_baseline_context(PRIOR_DIALOGUE, USER_QUESTION, eval_config)
-    except Exception as exc:  # noqa: BLE001
-        return SmokeResult(
-            method,
-            SmokeResult.FAIL,
-            f"server reachable ({info}) but build_baseline_context raised "
-            f"{type(exc).__name__}: {exc}. Ensure the Letta server has a working LLM + "
-            "embedding provider configured.",
-        )
-    result = _check_context(method, ctx)
-    result.detail = f"server={base_url}; {result.detail}"
-    return result
-
-
 _RUNNERS = {
     "MemoryBank": smoke_memorybank,
-    "Letta": smoke_letta,
 }
 
 
@@ -171,12 +113,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Method to smoke-test (repeatable). Defaults to all supported methods.",
     )
     parser.add_argument("--top-k", type=int, default=5)
-    parser.add_argument("--base-url", default="", help="Override the generic memory base_url (ignored by Letta server resolution).")
+    parser.add_argument("--base-url", default="", help="Override the generic memory base_url.")
     parser.add_argument("--api-key", default="", help="Override the generic memory api_key.")
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Treat an unreachable Letta server as a failure instead of a skip.",
+        help="Reserved for future smoke tests that may skip when services are unavailable.",
     )
     return parser.parse_args(argv)
 

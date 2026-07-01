@@ -20,7 +20,6 @@ from .lightmem_toolkit import _prepare_import_path
 
 
 METHOD = "LightMem"
-FULL_METHOD = "LightMemFull"
 
 
 def _logging_enabled() -> bool:
@@ -59,8 +58,6 @@ def build_context(
 
     if _is_full_method(method):
         ingest_full_lightmem(lightmem, messages)
-    else:
-        ingest_raw_dialogue_lightmem(lightmem, messages)
     retrieved_strings = retry_embedding_query(
         lambda: lightmem.retrieve(user_question, limit=eval_config.top_k),
         method=method,
@@ -80,7 +77,7 @@ def build_context(
 
 
 def _is_full_method(method: str) -> bool:
-    return method == FULL_METHOD
+    return method == METHOD
 
 
 def retrieval_only_lightmem_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -135,24 +132,14 @@ def _load_native_lightmem_config(eval_config: BaselineEvalConfig, *, user_id: st
             text_embedder_configs["model_kwargs"] = {
                 "device": os.environ.get("MEMORY_EMBEDDING_DEVICE", "cpu")}
 
-        if _is_full_method(eval_config.method):
-            config = _default_full_lightmem_config(
-                eval_config,
-                user_id=user_id,
-                save_dir=save_dir,
-                embedder_provider=embedder_provider,
-                text_embedder_configs=text_embedder_configs,
-                embedding_dims=embedding_dims,
-            )
-        else:
-            config = _default_raw_lightmem_config(
-                eval_config,
-                user_id=user_id,
-                save_dir=save_dir,
-                embedder_provider=embedder_provider,
-                text_embedder_configs=text_embedder_configs,
-                embedding_dims=embedding_dims,
-            )
+        config = _default_full_lightmem_config(
+            eval_config,
+            user_id=user_id,
+            save_dir=save_dir,
+            embedder_provider=embedder_provider,
+            text_embedder_configs=text_embedder_configs,
+            embedding_dims=embedding_dims,
+        )
 
     _patch_native_lightmem_config(
         config, eval_config, user_id=user_id, save_dir=save_dir)

@@ -1,7 +1,0 @@
-{
-  "method": "ZepLegacy",
-  "top_k": 10,
-  "save_root": "output_data/baseline_eval_memory",
-  "api_key_env": "ZEP_API_SECRET",
-  "base_url": "http://localhost:8000/api/v2"
-}

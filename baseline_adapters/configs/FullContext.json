@@ -1,9 +1,0 @@
-{
-  "method": "FullContext",
-  "top_k": 10,
-  "config_path": "methods/LightMem/src/lightmem/memory_toolkits/configs/FullContext.json",
-  "save_root": "output_data/baseline_eval_memory",
-  "api_key_env": "MEMORY_API_KEY",
-  "base_url_env": "MEMORY_BASE_URL",
-  "llm_model_env": "MEMORY_LLM_MODEL"
-}

@@ -26,12 +26,19 @@
 #   MEMORY_EMBEDDING_API_KEY
 #   MEMORY_EMBEDDING_BASE_URL
 #
-# Environment used by the Letta baseline (talks to a running Letta server):
-#   LETTA_BASE_URL          server URL (default http://localhost:8283)
-#   LETTA_API_KEY           server access token (only if LETTA_SERVER_PASSWORD is set)
-#   LETTA_MODEL             agent model handle, e.g. openai/gpt-4o-mini
-#   LETTA_EMBEDDING_MODEL   agent embedding handle, e.g. openai/text-embedding-3-small
-#   LETTA_INGEST_MODE       messages (default, agentic memory) | archival (RAG-style)
+# Environment used by the MemGPT baseline (a from-scratch, lightweight re-implementation
+# of the MemGPT memory mechanism; no vendored letta platform, no Docker, no extra deps beyond
+# openai + numpy). An LLM agent self-manages a two-tier memory via tool calls: it edits core
+# memory blocks (in-context) and inserts/searches an archival vector store. Memory is built
+# once per dialogue and reused across questions (cached via a marker file), matching the other
+# baselines' flow. It reuses the shared MEMORY_* vars exactly like MemoryBank / Supermemory:
+#   MEMORY_API_KEY / MEMORY_BASE_URL / MEMORY_LLM_MODEL          ingest agent LLM
+#   MEMORY_EMBEDDING_API_KEY / MEMORY_EMBEDDING_BASE_URL         archival embeddings
+#   MEMORY_EMBEDDING_MODEL / MEMORY_EMBEDDING_DIMS               embedding model + dim
+#   MEMGPT_MAX_STEPS            max agent tool-calling steps per ingest batch (default 12)
+#   MEMGPT_INGEST_BATCH_SIZE    dialogue turns per ingest batch (default 6)
+#   MEMGPT_LANGUAGE             en (default) | cn
+# Note: this is a faithful re-implementation of the MemGPT *mechanism*, not official Letta.
 #
 # Environment used by the MemoryBank baseline (reuses the MEMORY_* vars above;
 # LLM summaries use MEMORY_*, retrieval uses MEMORY_EMBEDDING_*):
@@ -53,25 +60,11 @@
 #   SUPERMEMORY_RETRIEVAL_MODE profile (default, static+dynamic profile + relevant memories)
 #                              | search (top-k semantic retrieval only)
 #   SUPERMEMORY_MAX_MEMORIES   max facts to extract per dialogue (default 40)
-#
-# Environment used by the MemGPTMinimal baseline (a from-scratch, lightweight re-implementation
-# of the MemGPT memory mechanism; no vendored letta platform, no Docker, no extra deps beyond
-# openai + numpy). An LLM agent self-manages a two-tier memory via tool calls: it edits core
-# memory blocks (in-context) and inserts/searches an archival vector store. Memory is built
-# once per dialogue and reused across questions (cached via a marker file), matching the other
-# baselines' flow. It reuses the shared MEMORY_* vars exactly like MemoryBank / Supermemory:
-#   MEMORY_API_KEY / MEMORY_BASE_URL / MEMORY_LLM_MODEL          ingest agent LLM
-#   MEMORY_EMBEDDING_API_KEY / MEMORY_EMBEDDING_BASE_URL         archival embeddings
-#   MEMORY_EMBEDDING_MODEL / MEMORY_EMBEDDING_DIMS               embedding model + dim
-#   MEMGPT_MAX_STEPS            max agent tool-calling steps per ingest batch (default 12)
-#   MEMGPT_INGEST_BATCH_SIZE    dialogue turns per ingest batch (default 6)
-#   MEMGPT_LANGUAGE             en (default) | cn
-# Note: this is a faithful re-implementation of the MemGPT *mechanism*, not official letta.
 
 set -euo pipefail
 
 TASKS=("personalized_recommendation" "preference_change" "preference_fact_conflict" "contextual_scope_limits" "objective_fact_judgment")
-METHODS=("NoMemory" "RawDialogue" "MemZero" "A-MEM" "LightMem" "MemoryBank")
+METHODS=("NoMemory" "RawDialogue" "MemZero" "A-MEM" "LightMem" "MemoryBank" "NaiveRAG" "MemGPT" "Supermemory")
 LIMIT=20
 WORKERS=1
 OUTER_WORKERS=1
@@ -105,7 +98,7 @@ usage() {
 
 Options:
   --tasks personalized_recommendation,preference_change,preference_fact_conflict,contextual_scope_limits,objective_fact_judgment
-  --methods NoMemory,RawDialogue,MemZero,A-MEM,LightMem,LightMemFull,MemoryBank,NaiveRAG,Letta,MemGPTMinimal,Supermemory
+  --methods NoMemory,RawDialogue,MemZero,A-MEM,LightMem,MemoryBank,NaiveRAG,MemGPT,Supermemory
   --limit N
   --workers N  Accepted for compatibility; optimized evaluators force workers=1.
   --outer-workers N  Run up to N task/method/model combinations concurrently.
@@ -169,10 +162,8 @@ method_slug() {
     NaiveRAG) echo "naive_rag" ;;
     A-MEM) echo "amem" ;;
     LightMem) echo "lightmem" ;;
-    LightMemFull) echo "lightmem_full" ;;
     MemoryBank) echo "memorybank" ;;
-    Letta) echo "letta" ;;
-    MemGPTMinimal) echo "memgpt_minimal" ;;
+    MemGPT) echo "memgpt" ;;
     Supermemory) echo "supermemory" ;;
     *)
       echo "$1" \

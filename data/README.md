@@ -60,7 +60,7 @@ Every JSONL row has the same seven top-level fields:
 - `dialogue`: Historical user-assistant messages. The final benchmark query is not included here.
 - `question`: The current query presented after the historical dialogue.
 - `memory`: Gold memory annotations and the intended memory-use policy.
-- `evaluation`: Reference answer, optional answer choices, preference-aligned failure direction, and task-specific rubric.
+- `evaluation`: Reference answer, preference-aligned failure direction, and task-specific rubric.
 - `metadata`: Minimal provenance and analysis labels. Objective Fact Judgment examples retain their source-dataset attribution here.
 
 ### Memory Status
@@ -101,5 +101,7 @@ for example in iter_dataset():
 A model under evaluation should receive only the condition-specific context and `question`. Fields under `memory` and `evaluation` are gold annotations for evaluation and analysis; they must not be exposed to the answer model unless an explicitly oracle-style condition is being studied.
 
 ## Release Notes
+
+Version `1.1` removes legacy multiple-choice fields (`evaluation.options`, `evaluation.gold_option`). All tasks are evaluated as open-ended questions with LLM judges.
 
 Version `1.0` replaces the previous heterogeneous release layout. Construction-only fields such as dialogue spans, validation flags, duplicated source text, and session-generation metadata were removed. Dialogue turns now use standard lowercase `role` values and content without duplicated `User:` or `Assistant:` prefixes.

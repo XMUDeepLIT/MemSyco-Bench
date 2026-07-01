@@ -4,7 +4,7 @@ from .base import BaselineContext, BaselineEvalConfig
 from .lightmem_toolkit import build_lightmem_toolkit_context
 
 
-METHODS = ("MemZero", "MemZeroGraph")
+METHODS = ("MemZero",)
 
 
 def build_context(

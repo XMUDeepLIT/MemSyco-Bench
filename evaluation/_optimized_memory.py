@@ -38,9 +38,8 @@ from baseline_adapters.common import (
 import _objective_base as base_eval
 
 
-_TOOLKIT_METHODS = {"FullContext", "NaiveRAG",
-                    "A-MEM", "MemZero", "MemZeroGraph", "LangMem"}
-_NATIVE_LIGHTMEM_METHODS = {"LightMem", "LightMemFull"}
+_TOOLKIT_METHODS = {"NaiveRAG", "A-MEM", "MemZero"}
+_NATIVE_LIGHTMEM_METHODS = {"LightMem"}
 _cache_guard = threading.Lock()
 _entry_locks: dict[tuple[Any, ...], threading.Lock] = {}
 _entries: dict[tuple[Any, ...], "_MemoryEntry"] = {}
@@ -58,7 +57,7 @@ _EMBEDDING_MODEL_ALIASES = {
 _DEFAULT_NATIVE_CACHE_MAX_ENTRIES = 1
 # Local Qdrant (mem0) cannot keep one client per sample in RAM for full datasets.
 _DEFAULT_TOOLKIT_CACHE_MAX_ENTRIES = 1
-_DISK_QDRANT_TOOLKIT_METHODS = {"NaiveRAG", "MemZero", "MemZeroGraph", "A-MEM"}
+_DISK_QDRANT_TOOLKIT_METHODS = {"NaiveRAG", "MemZero", "A-MEM"}
 
 
 def _normalize_embedding_model_for_fingerprint(model: Any) -> str:
@@ -468,7 +467,7 @@ def _build_toolkit_entry(
 
     config_dict["user_id"] = user_id
     config_dict["save_dir"] = save_dir
-    if "collection_name" in config_dict or method in {"NaiveRAG", "MemZero", "MemZeroGraph"}:
+    if "collection_name" in config_dict or method in {"NaiveRAG", "MemZero"}:
         config_dict["collection_name"] = user_id
     if eval_config.llm_model:
         config_dict["llm_model"] = _format_llm_model_for_method(

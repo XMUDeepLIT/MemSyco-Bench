@@ -26,7 +26,6 @@ output_data/
 processed_data/
 test_data/
 version1.1/
-article/
 logs/
 *.log
 output.txt

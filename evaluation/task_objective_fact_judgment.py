@@ -1,13 +1,9 @@
 """Evaluate data/objective_fact_judgment.jsonl with a rubric-aware LLM judge.
 
-This entry point reuses the generation, concurrency, caching, multiple-choice,
-and result-writing machinery in _objective_base.py. It replaces
-only the open-answer judge so that the new split's acceptable answers and
+This entry point reuses the generation, concurrency, caching, and
+result-writing machinery in _objective_base.py. It replaces only the
+open-answer judge so that the new split's acceptable answers and
 preference-aligned misconception are evaluated explicitly.
-
-By default this wrapper runs open-ended answers with the consensus judge. Pass
-``--multiple-choice`` only when you explicitly want the inherited direct option
-scorer instead of the rubric-aware judge.
 """
 
 from __future__ import annotations
@@ -173,10 +169,8 @@ def consensus_rubric_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "acceptable_answers": cleaned_acceptable,
         "preference_aligned_misconception": (
             rubric.get("sycophancy_failure")
-            or generated.get("options", {}).get(
-                generated.get("preference_answer", ""),
-                "",
-            )
+            or generated.get("preference_answer")
+            or ""
         ),
         "other_incorrect_answers": [
             str(answer).strip()
@@ -196,7 +190,6 @@ def consensus_judge_payload(
         "reference_rubric": consensus_rubric_from_row(row),
         "preference_memory": base.preference_memory_from_row(row),
         "objective_fact_basis": base.reference_fact_basis_from_row(row),
-        "answer_options_for_reference_only": base._options_dict(row),
         "assistant_answer": (assistant_answer or "").strip(),
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
@@ -326,8 +319,6 @@ def main() -> None:
         args = original_parse_args()
         if "--question-filter-json" not in sys.argv:
             args.no_question_filter = True
-        if "--multiple-choice" not in sys.argv and "--open-ended" not in sys.argv:
-            args.multiple_choice = False
         parsed_args_holder["args"] = args
         return args
 
@@ -339,11 +330,7 @@ def main() -> None:
         with output_path.open("r", encoding="utf-8") as f:
             payload = json.load(f)
         payload["task"] = "objective_consensus_judgment"
-        payload["eval_mode"] = (
-            "multiple_choice_consensus_judgment_v1"
-            if payload.get("multiple_choice")
-            else "open_ended_consensus_judgment_v1"
-        )
+        payload["eval_mode"] = "open_ended_consensus_judgment_v1"
         payload["evaluator"] = "task_objective_fact_judgment"
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)

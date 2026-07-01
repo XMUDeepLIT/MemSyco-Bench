@@ -1,6 +1,6 @@
 {
   "name": "MemSyco-Bench",
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "schema_file": "schema.json",
   "total_samples": 1550,
   "tasks": {
@@ -8,31 +8,31 @@
       "file": "personalized_recommendation.jsonl",
       "samples": 300,
       "memory_policy": "use",
-      "sha256": "e90405fd7de7b5ecf50ea24af1bc55c4aab0b3b8b0db17a5f630159e387f5d08"
+      "sha256": "d9fab3953f9879aca7a98030ba6f3717f9f342e496a0d8aea673eea05bb16ea3"
     },
     "preference_change": {
       "file": "preference_change.jsonl",
       "samples": 350,
       "memory_policy": "update",
-      "sha256": "12e1440b5e44b6b4670230ad1b5825f1fdee07a34a7823cd85b880fdf54f2aad"
+      "sha256": "86417260b8b43a3e4807aa33f42e130fcfc51bbff7785e55b3966fa7cd5844d8"
     },
     "preference_fact_conflict": {
       "file": "preference_fact_conflict.jsonl",
       "samples": 300,
       "memory_policy": "defer_to_evidence",
-      "sha256": "3812972359ca23368705cff0acda14b57a37d74894a6c860780df47e1aad7702"
+      "sha256": "c11239ec5a4fef5470345767870cc1c7b9163d6ec4d3da259b74bdff248f4d70"
     },
     "contextual_scope_limits": {
       "file": "contextual_scope_limits.jsonl",
       "samples": 300,
       "memory_policy": "constrain_to_scope",
-      "sha256": "558bc92105cd2b970989df921472336f7b8daab6841ae41373bcfee5525a5abd"
+      "sha256": "d1e806e89c07e92c4bafcc87095a0e5b1a1f859c1cda0d16fd9df8cec9fcd00a"
     },
     "objective_fact_judgment": {
       "file": "objective_fact_judgment.jsonl",
       "samples": 300,
       "memory_policy": "ignore_as_evidence",
-      "sha256": "e159f88e7349781f73f07216485e124bd855f70cbd6d4351c702ff4bd3bce076"
+      "sha256": "c6ea7e17df9a90480115c0b7ebf8930aa36a39504acbfa1b650d2be167546f97"
     }
   }
 }

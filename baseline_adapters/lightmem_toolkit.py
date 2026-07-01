@@ -21,7 +21,7 @@ LIGHTMEM_TOOLKIT_DIR = REPO_ROOT / "methods" / "LightMem" / "src" / "lightmem" /
 DEFAULT_LIGHTMEM_CONFIG_DIR = LIGHTMEM_TOOLKIT_DIR / "configs"
 VENDORED_MEM0_PARENT_DIR = LIGHTMEM_TOOLKIT_DIR / "memories" / "layers" / "baselines"
 
-LIGHTMEM_TOOLKIT_METHODS = ("FullContext", "NaiveRAG", "A-MEM", "MemZero", "MemZeroGraph", "LangMem")
+LIGHTMEM_TOOLKIT_METHODS = ("NaiveRAG", "A-MEM", "MemZero")
 
 
 def build_lightmem_toolkit_context(
@@ -42,7 +42,7 @@ def build_lightmem_toolkit_context(
 
     config_dict["user_id"] = user_id
     config_dict["save_dir"] = save_dir
-    if "collection_name" in config_dict or method in {"NaiveRAG", "MemZero", "MemZeroGraph"}:
+    if "collection_name" in config_dict or method in {"NaiveRAG", "MemZero"}:
         config_dict["collection_name"] = user_id
     if eval_config.llm_model:
         config_dict["llm_model"] = _format_llm_model_for_method(method, eval_config.llm_model)

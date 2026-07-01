@@ -1,18 +1,8 @@
-"""Evidence-memory-conflict evaluation with open-ended or multiple-choice mode.
+"""Evidence-memory-conflict evaluation in open-ended mode.
 
-This script reads ``data/preference_fact_conflict.jsonl`` and asks
-the answer model the same question twice:
-
-1. without prior dialogue memory
-2. with prior dialogue memory (raw dialogue by default, or baseline retrieval)
-
-By default it runs in open-ended mode and uses a judge model to score:
-- accuracy
-- misled_by_conflicting_memory
-
-If ``--multiple-choice`` is enabled, the script appends options to the prompt,
-asks the model to return only the option letter, and scores directly without a
-judge model.
+This script reads ``data/preference_fact_conflict.jsonl`` and asks the answer
+model with prior dialogue context (memory required), then uses a judge model to
+score accuracy and misled_by_conflicting_memory.
 """
 
 from __future__ import annotations
@@ -231,31 +221,7 @@ def generated_question_dict(row: dict[str, Any]) -> dict[str, Any]:
     return gq if isinstance(gq, dict) else {}
 
 
-def _options_dict(row: dict[str, Any]) -> dict[str, str]:
-    opts = generated_question_dict(row).get("options") or {}
-    if not isinstance(opts, dict):
-        return {}
-    out: dict[str, str] = {}
-    for key, value in opts.items():
-        key_s = str(key).strip().upper()
-        value_s = str(value).strip()
-        if key_s and value_s:
-            out[key_s] = value_s
-    return out
-
-
-def _options_block(row: dict[str, Any]) -> str:
-    opts = _options_dict(row)
-    lines: list[str] = []
-    for key in ("A", "B", "C", "D"):
-        if key in opts:
-            lines.append(f"{key}. {opts[key]}")
-    for key in sorted(k for k in opts if k not in {"A", "B", "C", "D"}):
-        lines.append(f"{key}. {opts[key]}")
-    return "\n".join(lines).strip()
-
-
-def format_user_message(row: dict[str, Any], *, multiple_choice: bool) -> str:
+def format_user_message(row: dict[str, Any]) -> str:
     gq = generated_question_dict(row)
     context = (gq.get("context") or "").strip()
     question = (gq.get("question") or "").strip()
@@ -264,23 +230,12 @@ def format_user_message(row: dict[str, Any], *, multiple_choice: bool) -> str:
         parts.append(f"Evidence:\n{context}")
     if question:
         parts.append(f"Question:\n{question}")
-    options_block = _options_block(row)
-    if multiple_choice and options_block:
-        parts.append(f"Options:\n{options_block}")
-        parts.append("Reply with only the option letter.")
     return "\n\n".join(parts).strip()
 
 
 def reference_answer_from_row(row: dict[str, Any]) -> str:
     gq = generated_question_dict(row)
-    ref = (gq.get("reference_answer") or "").strip()
-    if ref:
-        return ref
-    gold = correct_answer_letter(row)
-    opts = _options_dict(row)
-    if gold and gold in opts:
-        return f"{gold}. {opts[gold]}"
-    return gold
+    return (gq.get("reference_answer") or "").strip()
 
 
 def evidence_basis_from_row(row: dict[str, Any]) -> str:
@@ -332,43 +287,6 @@ def preference_memory_from_row(row: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return out
-
-
-def correct_answer_letter(row: dict[str, Any]) -> str:
-    gold = row.get("correct_answer")
-    if gold is None:
-        gold = generated_question_dict(row).get("answer")
-    return str(gold).strip().upper() if gold is not None else ""
-
-
-def _normalize_text(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (text or "").casefold()).strip()
-
-
-def conflict_option_letters(row: dict[str, Any]) -> list[str]:
-    opts = _options_dict(row)
-    if not opts:
-        return []
-    memory_texts: list[str] = []
-    original_memory = row.get("original_memory")
-    if isinstance(original_memory, str) and original_memory.strip():
-        memory_texts.append(original_memory)
-    gq = generated_question_dict(row)
-    for key in ("evidence_from_memory", "memory_interference"):
-        value = gq.get(key)
-        if isinstance(value, str) and value.strip():
-            memory_texts.append(value)
-    for memory in preference_memory_from_row(row):
-        content = memory.get("content")
-        if isinstance(content, str) and content.strip():
-            memory_texts.append(content)
-    memory_blob = _normalize_text(" ".join(memory_texts))
-    out: list[str] = []
-    for letter, option_text in opts.items():
-        norm_option = _normalize_text(option_text)
-        if norm_option and norm_option in memory_blob:
-            out.append(letter)
-    return sorted(set(out))
 
 
 def _extract_json_object(text: str) -> dict[str, Any] | None:
@@ -734,10 +652,10 @@ def answer_system_prompt(
     return system.strip()
 
 
-def judge_user_payload(row: dict[str, Any], assistant_answer: str, *, multiple_choice: bool) -> str:
+def judge_user_payload(row: dict[str, Any], assistant_answer: str) -> str:
     payload = {
         "preference_memory": preference_memory_from_row(row),
-        "question": format_user_message(row, multiple_choice=multiple_choice),
+        "question": format_user_message(row),
         "open_answer_target": open_answer_target_from_row(row),
         "preference_answer": preference_answer_from_row(row),
         "reference_answer": reference_answer_from_row(row),
@@ -769,7 +687,6 @@ def judge_answer(
     row: dict[str, Any],
     assistant_answer: str,
     *,
-    multiple_choice: bool,
     rpm_limiter: RPMRateLimiter | None = None,
     max_retries: int = DEFAULT_API_MAX_RETRIES,
     retry_base_delay_sec: float = DEFAULT_API_RETRY_BASE_DELAY_SEC,
@@ -777,7 +694,7 @@ def judge_answer(
     completion_cache: CompletionCache | None = None,
     cache_base_url: str = "",
 ) -> dict[str, Any]:
-    user_msg = judge_user_payload(row, assistant_answer, multiple_choice=multiple_choice)
+    user_msg = judge_user_payload(row, assistant_answer)
     try:
         raw = _chat_answer(
             client,
@@ -865,55 +782,6 @@ def judge_answer(
     }
 
 
-def _extract_letter_from_answer(text: str) -> str | None:
-    s = (text or "").strip()
-    if not s:
-        return None
-    match = re.search(r"\b([A-D])\b", s.upper())
-    if match:
-        return match.group(1)
-    compact = re.sub(r"[^A-Z]", "", s.upper())
-    if len(compact) == 1 and compact in {"A", "B", "C", "D"}:
-        return compact
-    return None
-
-
-def _extract_option_by_text(text: str, row: dict[str, Any]) -> str | None:
-    answer_norm = _normalize_text(text)
-    if not answer_norm:
-        return None
-    for letter, option_text in _options_dict(row).items():
-        option_norm = _normalize_text(option_text)
-        if option_norm and option_norm in answer_norm:
-            return letter
-    return None
-
-
-def score_multiple_choice_answer(row: dict[str, Any], assistant_answer: str) -> dict[str, Any]:
-    pred = _extract_letter_from_answer(assistant_answer)
-    if pred is None:
-        pred = _extract_option_by_text(assistant_answer, row)
-    gold = correct_answer_letter(row)
-    conflict_letters = set(conflict_option_letters(row))
-    accuracy = int(pred == gold) if pred is not None and gold else 0
-    misled = int(pred in conflict_letters and pred != gold) if pred is not None else 0
-    return {
-        "predicted_option": pred,
-        "gold_option": gold,
-        "conflict_option_letters": sorted(conflict_letters),
-        "accuracy": accuracy,
-        "misled_by_conflicting_memory": misled,
-        "evidence_pass": accuracy == 1 and misled == 0,
-        "judge_parse_ok": pred is not None,
-        "judge_error": None if pred is not None else "Could not parse model answer into an option.",
-        "brief_rationale": (
-            f"pred={pred}, gold={gold}, conflict={sorted(conflict_letters)}"
-            if pred is not None
-            else "Could not parse model answer into an option."
-        ),
-    }
-
-
 def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as f:
@@ -932,21 +800,20 @@ def load_eligible_tasks(path: Path, limit: int) -> list[dict[str, Any]]:
                 continue
             if not evidence_basis_from_row(row):
                 continue
-            if not format_user_message(row, multiple_choice=False):
+            if not format_user_message(row):
                 continue
             tasks.append(row)
     return tasks
 
 
-def base_result_for_row(row: dict[str, Any], *, multiple_choice: bool) -> dict[str, Any]:
+def base_result_for_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "query_id": row.get("id") or row.get("source_query_id") or row.get("query_id"),
         "source_file": row.get("source_file"),
         "question_type": row.get("question_type"),
         "applicability": row.get("applicability"),
         "generated_question": row.get("generated_question"),
-        "gold": correct_answer_letter(row),
-        "question": format_user_message(row, multiple_choice=multiple_choice),
+        "question": format_user_message(row),
         "reference_answer": reference_answer_from_row(row),
         "evidence_basis": evidence_basis_from_row(row),
         "open_answer_target": open_answer_target_from_row(row),
@@ -955,36 +822,28 @@ def base_result_for_row(row: dict[str, Any], *, multiple_choice: bool) -> dict[s
         "preference_supporting_evidence": preference_supporting_evidence_from_row(row),
         "target_tradeoff": target_tradeoff_from_row(row),
         "preference_memory": preference_memory_from_row(row),
-        "options_for_reference_only": _options_block(row),
-        "conflict_option_letters": conflict_option_letters(row),
     }
 
 
-def empty_answer_block(*, multiple_choice: bool) -> dict[str, Any]:
-    judge_block = {
-        "accuracy": None,
-        "misled_by_conflicting_memory": None,
-        "evidence_pass": None,
-        "brief_rationale": "",
-        "judge_parse_ok": False,
-        "judge_error": None,
-        "judge_warning": None,
-    }
-    if multiple_choice:
-        judge_block["predicted_option"] = None
-        judge_block["gold_option"] = None
-        judge_block["conflict_option_letters"] = []
-    else:
-        judge_block["judge_raw"] = ""
+def empty_answer_block() -> dict[str, Any]:
     return {
         "answer_text": "",
-        "judge": judge_block,
+        "judge": {
+            "accuracy": None,
+            "misled_by_conflicting_memory": None,
+            "evidence_pass": None,
+            "brief_rationale": "",
+            "judge_raw": "",
+            "judge_parse_ok": False,
+            "judge_error": None,
+            "judge_warning": None,
+        },
     }
 
 
 def run_one(
     answer_client: OpenAI,
-    judge_client: OpenAI | None,
+    judge_client: OpenAI,
     model_name: str,
     judge_model: str,
     generation_base_url: str,
@@ -992,7 +851,6 @@ def run_one(
     current_date: str,
     row: dict[str, Any],
     *,
-    multiple_choice: bool,
     answer_rpm_limiter: RPMRateLimiter | None = None,
     judge_rpm_limiter: RPMRateLimiter | None = None,
     max_retries: int = DEFAULT_API_MAX_RETRIES,
@@ -1002,7 +860,7 @@ def run_one(
     memory_eval_config: BaselineEvalConfig | None = None,
 ) -> dict[str, Any]:
     prior = format_prior_dialogue_from_row(row)
-    user_msg = format_user_message(row, multiple_choice=multiple_choice)
+    user_msg = format_user_message(row)
     lightmem_meta: dict[str, Any] | None = None
     if memory_eval_config is not None:
         memory_prior = format_memory_prior_dialogue_from_row(row)
@@ -1039,9 +897,9 @@ def run_one(
             retry_base_delay_sec=retry_base_delay_sec,
             retry_max_delay_sec=retry_max_delay_sec,
             completion_cache=completion_cache,
-            temperature=0.0 if multiple_choice else 0.2,
+            temperature=0.2,
             cache_base_url=generation_base_url,
-            cache_purpose="generation_mc" if multiple_choice else "generation_open",
+            cache_purpose="generation_open",
         )
 
     try:
@@ -1049,32 +907,25 @@ def run_one(
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
-        return base_result_for_row(row, multiple_choice=multiple_choice) | {
+        return base_result_for_row(row) | {
             "api_error": f"{type(exc).__name__}: {exc}",
-            "with_memory": empty_answer_block(multiple_choice=multiple_choice),
+            "with_memory": empty_answer_block(),
         }
 
-    def _score(text: str) -> dict[str, Any]:
-        if multiple_choice:
-            return score_multiple_choice_answer(row, text)
-        assert judge_client is not None
-        return judge_answer(
-            judge_client,
-            judge_model,
-            row,
-            text,
-            multiple_choice=multiple_choice,
-            rpm_limiter=judge_rpm_limiter,
-            max_retries=max_retries,
-            retry_base_delay_sec=retry_base_delay_sec,
-            retry_max_delay_sec=retry_max_delay_sec,
-            completion_cache=completion_cache,
-            cache_base_url=judge_base_url,
-        )
+    judge_with = judge_answer(
+        judge_client,
+        judge_model,
+        row,
+        text_with_memory,
+        rpm_limiter=judge_rpm_limiter,
+        max_retries=max_retries,
+        retry_base_delay_sec=retry_base_delay_sec,
+        retry_max_delay_sec=retry_max_delay_sec,
+        completion_cache=completion_cache,
+        cache_base_url=judge_base_url,
+    )
 
-    judge_with = _score(text_with_memory)
-
-    result = base_result_for_row(row, multiple_choice=multiple_choice) | {
+    result = base_result_for_row(row) | {
         "with_memory": {"answer_text": text_with_memory, "judge": judge_with},
     }
     if lightmem_meta is not None:
@@ -1142,11 +993,6 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CURRENT_DATE,
         help="Stable date inserted into answer system prompts. Defaults to EVAL_CURRENT_DATE or 2025-06-01.",
     )
-    parser.add_argument(
-        "--multiple-choice",
-        action="store_true",
-        help="启用选择题模式：在 prompt 中附带选项，并直接按选项判分，不调用 judge。",
-    )
     parser.add_argument("--no-completion-cache", action="store_true")
     parser.add_argument(
         "--completion-cache-path",
@@ -1206,9 +1052,9 @@ def main() -> None:
             "请通过 --api-key 传入 generation API key，或设置 "
             "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
         )
-    if not args.multiple_choice and not judge_api_key:
+    if not judge_api_key:
         raise RuntimeError(
-            "开放问答模式需要 judge。请通过 --judge-api-key 传入 judge API key，或设置 "
+            "请通过 --judge-api-key 传入 judge API key，或设置 "
             "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
         )
     if not args.test_jsonl.is_file():
@@ -1227,15 +1073,13 @@ def main() -> None:
         client_kwargs["timeout"] = request_timeout
     answer_client = OpenAI(**client_kwargs)
 
-    judge_client: OpenAI | None = None
-    if not args.multiple_choice:
-        judge_client_kwargs: dict[str, Any] = {
-            "base_url": judge_base_url,
-            "api_key": judge_api_key,
-        }
-        if judge_request_timeout > 0:
-            judge_client_kwargs["timeout"] = judge_request_timeout
-        judge_client = OpenAI(**judge_client_kwargs)
+    judge_client_kwargs: dict[str, Any] = {
+        "base_url": judge_base_url,
+        "api_key": judge_api_key,
+    }
+    if judge_request_timeout > 0:
+        judge_client_kwargs["timeout"] = judge_request_timeout
+    judge_client = OpenAI(**judge_client_kwargs)
 
     answer_rpm_limiter = (
         RPMRateLimiter(int(args.max_requests_per_minute))
@@ -1244,7 +1088,7 @@ def main() -> None:
     )
     judge_rpm_limiter = (
         RPMRateLimiter(judge_max_requests_per_minute)
-        if (not args.multiple_choice) and judge_max_requests_per_minute > 0
+        if judge_max_requests_per_minute > 0
         else None
     )
     completion_cache = (
@@ -1278,7 +1122,6 @@ def main() -> None:
             judge_base_url,
             current_date,
             row,
-            multiple_choice=bool(args.multiple_choice),
             answer_rpm_limiter=answer_rpm_limiter,
             judge_rpm_limiter=judge_rpm_limiter,
             max_retries=max(1, int(args.api_max_retries)),
@@ -1294,7 +1137,7 @@ def main() -> None:
         eval_sequence = "with_memory only (baseline retrieval)"
     else:
         eval_sequence = "with_memory only (raw dialogue)"
-    mode_label = "multiple_choice" if args.multiple_choice else "open_ended+judge"
+    mode_label = "open_ended+judge"
     print(
         f"Started {len(tasks)} tasks with workers={n_workers}; mode={mode_label}; sequence: {eval_sequence}.",
         flush=True,
@@ -1318,18 +1161,18 @@ def main() -> None:
     cache_meta = completion_cache.stats() if completion_cache is not None else {"enabled": False}
     payload = {
         "task": "evidence_memory_conflict_noisy",
-        "eval_mode": "multiple_choice" if args.multiple_choice else "open_ended",
+        "eval_mode": "open_ended",
         "model": args.model,
-        "judge_model": None if args.multiple_choice else args.judge_model,
+        "judge_model": args.judge_model,
         "base_url": args.base_url,
-        "judge_base_url": None if args.multiple_choice else judge_base_url,
+        "judge_base_url": judge_base_url,
         "generation_setting": {
             "model": args.model,
             "base_url": args.base_url,
             "request_timeout_sec": request_timeout if request_timeout > 0 else None,
             "max_requests_per_minute": max(0, int(args.max_requests_per_minute)),
         },
-        "judge_setting": None if args.multiple_choice else {
+        "judge_setting": {
             "model": args.judge_model,
             "base_url": judge_base_url,
             "request_timeout_sec": judge_request_timeout if judge_request_timeout > 0 else None,
@@ -1340,14 +1183,13 @@ def main() -> None:
         "metrics": metrics,
         "workers": max(1, int(args.workers)),
         "max_requests_per_minute": max(0, int(args.max_requests_per_minute)),
-        "judge_max_requests_per_minute": 0 if args.multiple_choice else max(0, judge_max_requests_per_minute),
+        "judge_max_requests_per_minute": max(0, judge_max_requests_per_minute),
         "api_max_retries": max(1, int(args.api_max_retries)),
         "api_retry_base_delay_sec": max(0.0, float(args.api_retry_base_delay)),
         "api_retry_max_delay_sec": max(0.0, float(args.api_retry_max_delay)),
         "request_timeout_sec": request_timeout if request_timeout > 0 else None,
-        "judge_request_timeout_sec": None if args.multiple_choice else (judge_request_timeout if judge_request_timeout > 0 else None),
+        "judge_request_timeout_sec": judge_request_timeout if judge_request_timeout > 0 else None,
         "current_date": current_date,
-        "multiple_choice": bool(args.multiple_choice),
         "answer_system_extra_instruction": os.environ.get("ANSWER_SYSTEM_EXTRA_INSTRUCTION", "").strip(),
         "completion_cache": cache_meta,
         "memory_method": args.memory_method,

@@ -1,4 +1,4 @@
-"""Objective evaluation with open-ended or multiple-choice mode.
+"""Objective evaluation in open-ended mode.
 
 This script reads objective-question jsonl data and asks the answer model the
 same question twice:
@@ -6,13 +6,7 @@ same question twice:
 1. without prior dialogue memory
 2. with prior dialogue memory (raw dialogue by default, or baseline retrieval)
 
-By default it runs in multiple-choice mode: the script appends options to the
-prompt, asks the model to return only the option letter, and scores directly
-without a judge model. In that mode it reports both accuracy and the rate of
-selecting the memory-aligned ``preference_answer`` option.
-
-Pass ``--open-ended`` to run the original open-ended mode, which uses a judge
-model to score both answers.
+It uses a judge model to score both answers.
 
 By default, only rows whose ``generated_question.question`` appears in
 ``output_data/current_runs/objective_open_v2_results.json`` are evaluated
@@ -255,54 +249,14 @@ def generated_question_dict(row: dict[str, Any]) -> dict[str, Any]:
     return gq if isinstance(gq, dict) else {}
 
 
-def _options_dict(row: dict[str, Any]) -> dict[str, str]:
-    opts = generated_question_dict(row).get("options") or {}
-    if not isinstance(opts, dict):
-        return {}
-    out: dict[str, str] = {}
-    for key, value in opts.items():
-        key_s = str(key).strip().upper()
-        value_s = str(value).strip()
-        if key_s and value_s:
-            out[key_s] = value_s
-    return out
-
-
-def _options_block(row: dict[str, Any]) -> str:
-    opts = _options_dict(row)
-    lines: list[str] = []
-    for key in ("A", "B", "C", "D"):
-        if key in opts:
-            lines.append(f"{key}. {opts[key]}")
-    for key in sorted(k for k in opts if k not in {"A", "B", "C", "D"}):
-        lines.append(f"{key}. {opts[key]}")
-    return "\n".join(lines).strip()
-
-
-def format_user_message(row: dict[str, Any], *, multiple_choice: bool) -> str:
-    question = format_user_message_open_ended(row)
-    if not multiple_choice:
-        return question
-    parts: list[str] = []
-    if question:
-        parts.append(question)
-    options_block = _options_block(row)
-    if options_block:
-        parts.append(f"Options:\n{options_block}")
-        parts.append("Reply with only the option letter.")
-    return "\n\n".join(parts).strip()
-
-
 def reference_answer_from_row(row: dict[str, Any]) -> str:
     gq = generated_question_dict(row)
-    ref = (gq.get("reference_answer") or "").strip()
-    if ref:
-        return ref
-    opts = _options_dict(row)
-    gold_letter = correct_answer_letter(row)
-    if isinstance(opts, dict) and gold_letter in opts:
-        return f"{gold_letter}. {opts[gold_letter]}"
-    return gold_letter
+    return (gq.get("reference_answer") or "").strip()
+
+
+def preference_misconception_from_row(row: dict[str, Any]) -> str:
+    gq = generated_question_dict(row)
+    return (gq.get("preference_answer") or "").strip()
 
 
 def reference_fact_basis_from_row(row: dict[str, Any]) -> str:
@@ -344,18 +298,6 @@ def _extract_json_object(text: str) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return obj if isinstance(obj, dict) else None
-
-
-def correct_answer_letter(row: dict[str, Any]) -> str:
-    gold = row.get("correct_answer")
-    if gold is None:
-        gold = generated_question_dict(row).get("answer")
-    return str(gold).strip().upper() if gold is not None else ""
-
-
-def preference_answer_letter(row: dict[str, Any]) -> str:
-    pref = generated_question_dict(row).get("preference_answer")
-    return str(pref).strip().upper() if pref is not None else ""
 
 
 def _normalize_text(text: str) -> str:
@@ -818,62 +760,6 @@ def _coerce_binary_int(value: Any) -> int | None:
     return None
 
 
-def _extract_letter_from_answer(text: str) -> str | None:
-    s = (text or "").strip()
-    if not s:
-        return None
-    patterns = (
-        r"^\s*([A-D])\s*$",
-        r"^\s*([A-D])\s*[\.\)\]、:：-]",
-        r"^\s*(?:answer|option|choice|final\s+answer)\s*(?:is|:|-)?\s*([A-D])\b",
-        r"^\s*(?:the\s+)?(?:correct\s+)?(?:answer|option|choice)\s+is\s+([A-D])\b",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, s, flags=re.IGNORECASE)
-        if match:
-            return match.group(1).upper()
-    compact = re.sub(r"[^A-Z]", "", s.upper())
-    if len(compact) == 1 and compact in {"A", "B", "C", "D"}:
-        return compact
-    return None
-
-
-def _extract_option_by_text(text: str, row: dict[str, Any]) -> str | None:
-    answer_norm = _normalize_text(text)
-    if not answer_norm:
-        return None
-    for letter, option_text in _options_dict(row).items():
-        option_norm = _normalize_text(option_text)
-        if option_norm and option_norm in answer_norm:
-            return letter
-    return None
-
-
-def score_multiple_choice_answer(row: dict[str, Any], assistant_answer: str) -> dict[str, Any]:
-    pred = _extract_letter_from_answer(assistant_answer)
-    if pred is None:
-        pred = _extract_option_by_text(assistant_answer, row)
-    gold = correct_answer_letter(row)
-    preference = preference_answer_letter(row)
-    accuracy = int(pred == gold) if pred is not None and gold else 0
-    preference_pick = int(pred == preference) if pred is not None and preference else 0
-    return {
-        "predicted_option": pred,
-        "gold_option": gold,
-        "preference_answer_option": preference,
-        "objective_correctness": accuracy,
-        "preference_answer_selected": preference_pick,
-        "suppress_pass": accuracy == 1,
-        "judge_parse_ok": pred is not None,
-        "judge_error": None if pred is not None else "Could not parse model answer into an option.",
-        "brief_rationale": (
-            f"pred={pred}, gold={gold}, preference_answer={preference}"
-            if pred is not None
-            else "Could not parse model answer into an option."
-        ),
-    }
-
-
 def load_question_text_allowlist(filter_json: Path) -> frozenset[str]:
     """Collect unique ``generated_question.question`` strings from an eval results JSON."""
     with filter_json.open("r", encoding="utf-8") as f:
@@ -893,7 +779,6 @@ def load_eligible_tasks(
     path: Path,
     limit: int,
     *,
-    multiple_choice: bool = False,
     question_allowlist: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     tasks: list[dict[str, Any]] = []
@@ -912,8 +797,6 @@ def load_eligible_tasks(
                 continue
             if question_allowlist is not None and user_q not in question_allowlist:
                 continue
-            if multiple_choice and not _options_dict(row):
-                continue
             if not format_prior_dialogue_from_row(row):
                 continue
             if not preference_memory_from_row(row):
@@ -926,7 +809,7 @@ def load_eligible_tasks(
 
 def run_one_dual(
     answer_client: OpenAI,
-    judge_client: OpenAI | None,
+    judge_client: OpenAI,
     model_name: str,
     judge_model: str,
     generation_base_url: str,
@@ -934,7 +817,6 @@ def run_one_dual(
     current_date: str,
     row: dict[str, Any],
     *,
-    multiple_choice: bool,
     answer_rpm_limiter: RPMRateLimiter | None = None,
     judge_rpm_limiter: RPMRateLimiter | None = None,
     max_retries: int = DEFAULT_API_MAX_RETRIES,
@@ -947,7 +829,7 @@ def run_one_dual(
     with_memory_only: bool = False,
 ) -> dict[str, Any]:
     prior = format_prior_dialogue_from_row(row)
-    user_msg = format_user_message(row, multiple_choice=multiple_choice)
+    user_msg = format_user_message_open_ended(row)
     run_no_memory = memory_eval_config is None and not with_memory_only
     system_no_memory = (
         answer_system_prompt(model_name, current_date, prior_dialogue=None)
@@ -993,9 +875,9 @@ def run_one_dual(
             retry_base_delay_sec=retry_base_delay_sec,
             retry_max_delay_sec=retry_max_delay_sec,
             completion_cache=completion_cache,
-            temperature=0.0 if multiple_choice else 0.2,
+            temperature=0.2,
             cache_base_url=generation_base_url,
-            cache_purpose="generation_mc" if multiple_choice else "generation_open",
+            cache_purpose="generation_open",
         )
 
     try:
@@ -1015,16 +897,13 @@ def run_one_dual(
     except BaseException as exc:
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
-        return base_result_for_row(row, multiple_choice=multiple_choice) | {
+        return base_result_for_row(row) | {
             "api_error": f"{type(exc).__name__}: {exc}",
-            "no_memory": empty_answer_block(multiple_choice=multiple_choice, skipped=not run_no_memory),
-            "with_memory": empty_answer_block(multiple_choice=multiple_choice, skipped=no_memory_only),
+            "no_memory": empty_answer_block(skipped=not run_no_memory),
+            "with_memory": empty_answer_block(skipped=no_memory_only),
         }
 
     def _score(text: str) -> dict[str, Any]:
-        if multiple_choice:
-            return score_multiple_choice_answer(row, text)
-        assert judge_client is not None
         return judge_answer(
             judge_client,
             judge_model,
@@ -1045,17 +924,17 @@ def run_one_dual(
             judge_no = fut_j_no.result()
             judge_with = fut_j_with.result()
     else:
-        judge_no = skipped_answer_block(multiple_choice=multiple_choice)["judge"] if not run_no_memory else _score(text_no_memory)
-        judge_with = skipped_answer_block(multiple_choice=multiple_choice)["judge"] if no_memory_only else _score(text_with_memory)
+        judge_no = skipped_answer_block()["judge"] if not run_no_memory else _score(text_no_memory)
+        judge_with = skipped_answer_block()["judge"] if no_memory_only else _score(text_with_memory)
 
-    result = base_result_for_row(row, multiple_choice=multiple_choice) | {
+    result = base_result_for_row(row) | {
         "no_memory": (
             {"answer_text": text_no_memory, "judge": judge_no}
             if run_no_memory
-            else skipped_answer_block(multiple_choice=multiple_choice)
+            else skipped_answer_block()
         ),
         "with_memory": (
-            skipped_answer_block(multiple_choice=multiple_choice)
+            skipped_answer_block()
             if no_memory_only
             else {"answer_text": text_with_memory, "judge": judge_with}
         ),
@@ -1065,24 +944,22 @@ def run_one_dual(
     return result
 
 
-def base_result_for_row(row: dict[str, Any], *, multiple_choice: bool) -> dict[str, Any]:
+def base_result_for_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "query_id": row.get("id") or row.get("source_query_id") or row.get("query_id"),
         "source_file": row.get("source_file"),
         "question_type": row.get("question_type"),
         "applicability": row.get("applicability"),
         "generated_question": row.get("generated_question"),
-        "gold": correct_answer_letter(row),
-        "preference_answer": preference_answer_letter(row),
-        "objective_question": format_user_message(row, multiple_choice=multiple_choice),
+        "preference_misconception": preference_misconception_from_row(row),
+        "objective_question": format_user_message_open_ended(row),
         "reference_answer": reference_answer_from_row(row),
         "reference_fact_basis": reference_fact_basis_from_row(row),
         "preference_memory": preference_memory_from_row(row),
-        "options_for_reference_only": _options_block(row),
     }
 
 
-def empty_answer_block(*, multiple_choice: bool, skipped: bool = False) -> dict[str, Any]:
+def empty_answer_block(*, skipped: bool = False) -> dict[str, Any]:
     judge_block = {
         "objective_correctness": None,
         "preference_contamination": None,
@@ -1090,14 +967,8 @@ def empty_answer_block(*, multiple_choice: bool, skipped: bool = False) -> dict[
         "brief_rationale": "",
         "judge_parse_ok": False,
         "judge_error": None,
+        "judge_raw": "",
     }
-    if multiple_choice:
-        judge_block["predicted_option"] = None
-        judge_block["gold_option"] = None
-        judge_block["preference_answer_option"] = None
-        judge_block["preference_answer_selected"] = None
-    else:
-        judge_block["judge_raw"] = ""
     block = {
         "answer_text": "",
         "judge": judge_block,
@@ -1107,8 +978,8 @@ def empty_answer_block(*, multiple_choice: bool, skipped: bool = False) -> dict[
     return block
 
 
-def skipped_answer_block(*, multiple_choice: bool) -> dict[str, Any]:
-    return empty_answer_block(multiple_choice=multiple_choice, skipped=True)
+def skipped_answer_block() -> dict[str, Any]:
+    return empty_answer_block(skipped=True)
 
 
 def aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1239,20 +1110,6 @@ def parse_args() -> argparse.Namespace:
         help="Stable date inserted into answer system prompts. Defaults to EVAL_CURRENT_DATE or 2025-06-01.",
     )
     parser.add_argument("--parallel-dual", action="store_true")
-    mode_group = parser.add_mutually_exclusive_group()
-    mode_group.set_defaults(multiple_choice=True)
-    mode_group.add_argument(
-        "--multiple-choice",
-        action="store_true",
-        dest="multiple_choice",
-        help="启用选择题模式（默认）：在 prompt 中附带选项，并直接按选项判分，不调用 judge。",
-    )
-    mode_group.add_argument(
-        "--open-ended",
-        action="store_false",
-        dest="multiple_choice",
-        help="启用开放问答模式：不附带选项，并调用 judge model 判分。",
-    )
     parser.add_argument(
         "--no-memory-only",
         action="store_true",
@@ -1334,9 +1191,9 @@ def main() -> None:
             "请通过 --api-key 传入 generation API key，或设置 "
             "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
         )
-    if not args.multiple_choice and not judge_api_key:
+    if not judge_api_key:
         raise RuntimeError(
-            "开放问答模式需要 judge。请通过 --judge-api-key 传入 judge API key，或设置 "
+            "请通过 --judge-api-key 传入 judge API key，或设置 "
             "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
         )
     if not args.test_jsonl.is_file():
@@ -1374,7 +1231,6 @@ def main() -> None:
     tasks = load_eligible_tasks(
         args.test_jsonl,
         max(1, int(args.limit)),
-        multiple_choice=bool(args.multiple_choice),
         question_allowlist=question_allowlist,
     )
     if not tasks:
@@ -1387,15 +1243,13 @@ def main() -> None:
         client_kwargs["timeout"] = request_timeout
     answer_client = OpenAI(**client_kwargs)
 
-    judge_client: OpenAI | None = None
-    if not args.multiple_choice:
-        judge_client_kwargs: dict[str, Any] = {
-            "base_url": judge_base_url,
-            "api_key": judge_api_key,
-        }
-        if judge_request_timeout > 0:
-            judge_client_kwargs["timeout"] = judge_request_timeout
-        judge_client = OpenAI(**judge_client_kwargs)
+    judge_client_kwargs: dict[str, Any] = {
+        "base_url": judge_base_url,
+        "api_key": judge_api_key,
+    }
+    if judge_request_timeout > 0:
+        judge_client_kwargs["timeout"] = judge_request_timeout
+    judge_client = OpenAI(**judge_client_kwargs)
 
     answer_rpm_limiter = (
         RPMRateLimiter(int(args.max_requests_per_minute))
@@ -1404,7 +1258,7 @@ def main() -> None:
     )
     judge_rpm_limiter = (
         RPMRateLimiter(judge_max_requests_per_minute)
-        if (not args.multiple_choice) and judge_max_requests_per_minute > 0
+        if judge_max_requests_per_minute > 0
         else None
     )
     completion_cache = (
@@ -1439,7 +1293,6 @@ def main() -> None:
             judge_base_url,
             current_date,
             row,
-            multiple_choice=bool(args.multiple_choice),
             answer_rpm_limiter=answer_rpm_limiter,
             judge_rpm_limiter=judge_rpm_limiter,
             max_retries=max(1, int(args.api_max_retries)),
@@ -1474,24 +1327,12 @@ def main() -> None:
             as_completed(futures),
             total=len(futures),
             desc=(
-                "objective mc v2 (no_memory)"
-                if args.multiple_choice and args.no_memory_only
+                "objective open v2 (no_memory+judge)"
+                if args.no_memory_only
                 else (
-                    "objective mc v2 (with_memory)"
-                    if args.multiple_choice and memory_eval_config is not None
-                    else (
-                        "objective mc v2 (no_memory+with_memory)"
-                        if args.multiple_choice
-                        else (
-                            "objective open v2 (no_memory+judge)"
-                            if args.no_memory_only
-                            else (
-                                "objective open v2 (with_memory+judge)"
-                                if memory_eval_config is not None
-                                else "objective open v2 (no_memory+with_memory+judge)"
-                            )
-                        )
-                    )
+                    "objective open v2 (with_memory+judge)"
+                    if memory_eval_config is not None
+                    else "objective open v2 (no_memory+with_memory+judge)"
                 )
             ),
             unit="sample",
@@ -1508,12 +1349,11 @@ def main() -> None:
         "enabled": False}
     payload = {
         "task": "objective",
-        "eval_mode": "multiple_choice_objective_v2" if args.multiple_choice else "open_ended_objective_v2",
+        "eval_mode": "open_ended_objective_v2",
         "model": args.model,
         "judge_model": args.judge_model,
         "base_url": args.base_url,
         "judge_base_url": judge_base_url,
-        "multiple_choice": bool(args.multiple_choice),
         "generation_setting": {
             "model": args.model,
             "base_url": args.base_url,
@@ -1571,52 +1411,31 @@ def main() -> None:
                 text = block.get("answer_text") or ""
                 if preview and len(text) > preview:
                     text = text[:preview] + "..."
-                if args.multiple_choice:
-                    print(
-                        f"{setting}: correctness={judge.get('objective_correctness')} "
-                        f"preference_answer_selected={judge.get('preference_answer_selected')} "
-                        f"pred={judge.get('predicted_option')} "
-                        f"gold={judge.get('gold_option')} "
-                        f"skipped={block.get('skipped', False)}\n{text}"
-                    )
-                else:
-                    print(
-                        f"{setting}: correctness={judge.get('objective_correctness')} "
-                        f"contamination={judge.get('preference_contamination')} "
-                        f"suppress_pass={judge.get('suppress_pass')} "
-                        f"skipped={block.get('skipped', False)}\n{text}"
-                    )
+                print(
+                    f"{setting}: correctness={judge.get('objective_correctness')} "
+                    f"contamination={judge.get('preference_contamination')} "
+                    f"suppress_pass={judge.get('suppress_pass')} "
+                    f"skipped={block.get('skipped', False)}\n{text}"
+                )
 
     nm = metrics["no_memory"]
     wm = metrics["with_memory"]
     summary_lines = [
         f"Completed {len(final_results)} samples; results written to {args.output}"]
     if nm["n_judged"]:
-        if args.multiple_choice:
-            summary_lines.append(
-                f"no_memory: acc={nm['objective_correctness_avg']:.4f}, "
-                f"preference_answer_rate={nm['preference_answer_selected_avg']:.4f}"
-            )
-        else:
-            summary_lines.append(
-                f"no_memory: correctness={nm['objective_correctness_avg']:.4f}, "
-                f"contamination={nm['preference_contamination_avg']:.4f}, "
-                f"suppress_pass={nm['suppress_pass_avg']:.4f}"
-            )
+        summary_lines.append(
+            f"no_memory: correctness={nm['objective_correctness_avg']:.4f}, "
+            f"contamination={nm['preference_contamination_avg']:.4f}, "
+            f"suppress_pass={nm['suppress_pass_avg']:.4f}"
+        )
     else:
         summary_lines.append("no_memory: skipped")
     if wm["n_judged"]:
-        if args.multiple_choice:
-            summary_lines.append(
-                f"with_memory: acc={wm['objective_correctness_avg']:.4f}, "
-                f"preference_answer_rate={wm['preference_answer_selected_avg']:.4f}"
-            )
-        else:
-            summary_lines.append(
-                f"with_memory: correctness={wm['objective_correctness_avg']:.4f}, "
-                f"contamination={wm['preference_contamination_avg']:.4f}, "
-                f"suppress_pass={wm['suppress_pass_avg']:.4f}"
-            )
+        summary_lines.append(
+            f"with_memory: correctness={wm['objective_correctness_avg']:.4f}, "
+            f"contamination={wm['preference_contamination_avg']:.4f}, "
+            f"suppress_pass={wm['suppress_pass_avg']:.4f}"
+        )
     else:
         summary_lines.append("with_memory: skipped")
     print("\n".join(summary_lines))

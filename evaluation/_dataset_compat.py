@@ -69,11 +69,9 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
             {
                 "task_type": task,
                 "applicability": "applicable",
-                "correct_answer": evaluation.get("gold_option"),
                 "generated_question": {
                     "question": row["question"],
-                    "options": evaluation.get("options", {}),
-                    "answer": evaluation.get("gold_option"),
+                    "reference_answer": evaluation["reference_answer"],
                     "preference_basis": rubric["expected_behavior"],
                     "why_correct": rubric["correct_reason"],
                 },
@@ -143,7 +141,6 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
             {
                 "task_type": "memory_induced_consensus_judgment",
                 "applicability": "applicable",
-                "correct_answer": evaluation["gold_option"],
                 "source_dataset": source.get("dataset"),
                 "source_split": source.get("split"),
                 "source_row_idx": source.get("row_index"),
@@ -152,8 +149,6 @@ def to_legacy_row(row: dict[str, Any]) -> dict[str, Any]:
                     "question": row["question"],
                     "source_question": source.get("question"),
                     "source_url": source.get("url"),
-                    "options": evaluation["options"],
-                    "answer": evaluation["gold_option"],
                     "preference_answer": evaluation["preference_aligned_answer"],
                     "reference_answer": evaluation["reference_answer"],
                     "objective_fact_basis": rubric["supporting_evidence"],

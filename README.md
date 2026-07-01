@@ -70,7 +70,7 @@ Five task-specific tracks with complementary evaluation goals:
 - No prior memory (`NoMemory`)
 - Full relevant dialogue (`RawDialogue`)
 - Retrieved context from a memory baseline
-- Open-ended LLM judging or direct multiple-choice scoring, depending on the task
+- Open-ended LLM judging for all tasks
 
 Evaluation outputs are generated locally under `output_data/` and are not included in the repository.
 
@@ -169,14 +169,7 @@ Run a small example with one task and two memory settings:
   --limit 5
 ```
 
-The default driver includes `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, and `MemoryBank`. Additional adapters include `NaiveRAG`, `LangMem`, `LightMemFull`, `MemGPTMinimal`, `Supermemory`, `Letta`, and Zep variants. See the [Evaluation README](evaluation/README.md) for the unified task runner and the [Baseline Adapters README](baseline_adapters/README.md) for method-specific configuration.
-
-After generating the main results, run the answer-stability probe:
-
-```bash
-./scripts/eval_are_you_sure.sh \
-  --input-root output_data/baseline_opt_v2_runs_short_extra_instruction
-```
+The default driver runs nine baselines: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the [Evaluation README](evaluation/README.md) for the unified task runner and the [Baseline Adapters README](baseline_adapters/README.md) for method-specific configuration.
 
 All generated results, completion caches, memory stores, and logs are written under `output_data/`, which is intentionally ignored by Git.
 
