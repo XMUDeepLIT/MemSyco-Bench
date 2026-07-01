@@ -2,7 +2,7 @@
 
 # MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
 
-[![Static Badge](https://img.shields.io/badge/github-Preference--Memory-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Eric-Xiang-526/Preference-Memory)  [![Static Badge](https://img.shields.io/badge/dataset-1%2C550_samples-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](#benchmark-tasks)  [![Static Badge](https://img.shields.io/badge/tasks-5-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](#leaderboards)  [![Static Badge](https://img.shields.io/badge/API-OpenAI_compatible-teal?style=for-the-badge&labelColor=000)](#api-configuration)
+<!-- [![Static Badge](https://img.shields.io/badge/github-Preference--Memory-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Eric-Xiang-526/Preference-Memory)  [![Static Badge](https://img.shields.io/badge/dataset-1%2C550_samples-fcd022?style=for-the-badge&logo=huggingface&logoColor=000)](#benchmark-tasks)  [![Static Badge](https://img.shields.io/badge/tasks-5-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](#leaderboards)  [![Static Badge](https://img.shields.io/badge/API-OpenAI_compatible-teal?style=for-the-badge&labelColor=000)](#api-configuration) -->
 
 <p>
   <a href="#about" style="text-decoration: none; font-weight: bold;">📖 About</a> ·
@@ -74,7 +74,7 @@ Five task-specific tracks with complementary evaluation goals:
 
 Evaluation outputs are generated locally under `output_data/` and are not included in the repository.
 
-<h2 id="benchmark-tasks">🗂️ Benchmark Data</h2>
+<!-- <h2 id="benchmark-tasks">🗂️ Benchmark Data</h2>
 
 The final release contains 1,550 samples across five JSONL files:
 
@@ -84,7 +84,7 @@ All files follow one canonical schema; see the [Data Card](data/README.md) and [
 - **Preference Change:** [`data/preference_change.jsonl`](data/preference_change.jsonl)
 - **Preference-Fact Conflict:** [`data/preference_fact_conflict.jsonl`](data/preference_fact_conflict.jsonl)
 - **Contextual Scope Limits:** [`data/contextual_scope_limits.jsonl`](data/contextual_scope_limits.jsonl)
-- **Objective Fact Judgment:** [`data/objective_fact_judgment.jsonl`](data/objective_fact_judgment.jsonl)
+- **Objective Fact Judgment:** [`data/objective_fact_judgment.jsonl`](data/objective_fact_judgment.jsonl) -->
 
 <h2 id="task-examples">🧩 Task Examples</h2>
 
@@ -180,11 +180,11 @@ After generating the main results, run the answer-stability probe:
 
 All generated results, completion caches, memory stores, and logs are written under `output_data/`, which is intentionally ignored by Git.
 
-<h2 id="contribution--contact">📬 Contribution & Contact</h2>
+<!-- <h2 id="contribution--contact">📬 Contribution & Contact</h2>
 
-Questions, bug reports, and benchmark integration proposals are welcome through [GitHub Issues](https://github.com/Eric-Xiang-526/Preference-Memory/issues).
+Questions, bug reports, and benchmark integration proposals are welcome through [GitHub Issues](https://github.com/Eric-Xiang-526/Preference-Memory/issues). -->
 
-<h2 id="citation">🍀 Citation</h2>
+<!-- <h2 id="citation">🍀 Citation</h2>
 
 If you find MemSyco-Bench helpful, please cite the repository. The paper citation will be added after release.
 
@@ -195,7 +195,7 @@ If you find MemSyco-Bench helpful, please cite the repository. The paper citatio
   howpublished = {\url{https://github.com/Eric-Xiang-526/Preference-Memory}},
   note         = {Benchmark dataset and evaluation toolkit}
 }
-```
+``` -->
 
 <h2 id="stars">⭐ Stars History</h2>
 
