@@ -1,9 +1,8 @@
-processed_data/preference_change_questions/preference_update_question_with_whole_context.jsonl
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -25,7 +24,6 @@ ENV/
 output_data/
 processed_data/
 test_data/
-version1.1/
 logs/
 *.log
 output.txt

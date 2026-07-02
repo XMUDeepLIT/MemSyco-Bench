@@ -14,20 +14,8 @@ from .common import jsonable_memories, parse_dialogue_to_messages, retry_embeddi
 
 
 # ---------------------------------------------------------------------------
-# MemGPT baseline adapter — lightweight re-implementation of the MemGPT memory mechanism.
-#
-# 不依赖 vendored `methods/letta`（那是 13.8 万行的商业 agent 平台，要求 Python>=3.11，
-# 在 pre-mem/Python 3.10 里装不上）。这里只忠实复刻 MemGPT 论文的核心思想：
-#   LLM 充当「CPU」，通过 function-calling 自主管理一个两层记忆层级：
-#     - core memory：放在 system prompt 里的可编辑文本块（human / persona），
-#       用 core_memory_replace / core_memory_append 编辑。
-#     - archival memory：外部向量库，用 archival_memory_insert / archival_memory_search 读写。
-#   摄入时把 prior dialogue 喂给一个 agent loop（带上述工具），让 LLM 自行决定把哪些
-#   用户事实写进 core memory、哪些段落写进 archival；回答时把 core 块 + 对问题做 top-k
-#   检索的 archival 段落拼成上下文注入答案模型。
-#
-# 与 MemoryBank / Supermemory 一致：直连 MEMORY_* 端点，记忆按对话构建一次、
-# 落盘缓存、后续同一对话的不同问题复用。运行依赖只有 openai + numpy（pre-mem 已有）。
+# MemGPT baseline adapter — lightweight in-repo re-implementation of the MemGPT
+# memory mechanism (core memory blocks + archival vector store via tool calls).
 # ---------------------------------------------------------------------------
 
 METHOD = "MemGPT"

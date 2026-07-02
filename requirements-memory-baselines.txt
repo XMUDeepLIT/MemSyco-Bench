@@ -1,12 +1,12 @@
 # Optional extras for MemZero, A-MEM, NaiveRAG, and LightMem.
-# These four methods share vendored toolkit code under methods/LightMem/.
+# Toolkit code lives under baselines/toolkit/vendor/.
 # Install core requirements first:
 #   pip install -r requirements.txt
 #   pip install -r requirements-memory-baselines.txt
 
 -r requirements.txt
 
--e ./methods/LightMem
+-e ./baselines/lightmem/vendor
 
 accelerate==1.10.1
 aiohappyeyeballs==2.6.2

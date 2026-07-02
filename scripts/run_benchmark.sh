@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Run optimized memory-baseline evaluations for Personalized Memory Use,
-# Valid Memory Selection, Memory-Evidence Conflict, Contextual Scope Control,
-# and Objective Fact Judgment.
+# Run optimized memory-baseline evaluations for all five MemSyco-Bench tasks.
 #
 # Examples:
 #   ./scripts/run_benchmark.sh
@@ -12,56 +10,48 @@
 # Limit:
 #   --limit 20 runs 20 samples per task/method.
 #   --limit 0 omits --limit and lets each Python script use its own default.
-#
-# Environment expected by the evaluation scripts:
-#   GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY
-#   JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY
-#
-# Environment commonly used by baselines:
-#   MEMORY_API_KEY
-#   MEMORY_BASE_URL
-#   MEMORY_LLM_MODEL
-#   MEMORY_EMBEDDING_MODEL
-#   MEMORY_EMBEDDING_DIMS
-#   MEMORY_EMBEDDING_API_KEY
-#   MEMORY_EMBEDDING_BASE_URL
-#
-# Environment used by the MemGPT baseline (a from-scratch, lightweight re-implementation
-# of the MemGPT memory mechanism; no vendored letta platform, no Docker, no extra deps beyond
-# openai + numpy). An LLM agent self-manages a two-tier memory via tool calls: it edits core
-# memory blocks (in-context) and inserts/searches an archival vector store. Memory is built
-# once per dialogue and reused across questions (cached via a marker file), matching the other
-# baselines' flow. It reuses the shared MEMORY_* vars exactly like MemoryBank / Supermemory:
-#   MEMORY_API_KEY / MEMORY_BASE_URL / MEMORY_LLM_MODEL          ingest agent LLM
-#   MEMORY_EMBEDDING_API_KEY / MEMORY_EMBEDDING_BASE_URL         archival embeddings
-#   MEMORY_EMBEDDING_MODEL / MEMORY_EMBEDDING_DIMS               embedding model + dim
-#   MEMGPT_MAX_STEPS            max agent tool-calling steps per ingest batch (default 12)
-#   MEMGPT_INGEST_BATCH_SIZE    dialogue turns per ingest batch (default 6)
-#   MEMGPT_LANGUAGE             en (default) | cn
-# Note: this is a faithful re-implementation of the MemGPT *mechanism*, not official Letta.
-#
-# Environment used by the MemoryBank baseline (reuses the MEMORY_* vars above;
-# LLM summaries use MEMORY_*, retrieval uses MEMORY_EMBEDDING_*):
-#   MEMORYBANK_LANGUAGE        en (default) | cn
-#   MEMORYBANK_DISABLE_SUMMARY 1 to skip the LLM summary/personality step (retrieval only)
-#
-# Environment used by the Supermemory baseline (LOCAL re-implementation; no official
-# supermemory API/SDK needed). It faithfully reproduces Supermemory's mechanism on top of
-# this repo's infra, reusing the MEMORY_* vars exactly like MemoryBank / A-MEM: an LLM
-# extracts atomic facts about the user and splits them into a
-# static + dynamic profile; the bge-m3 embedding service (MEMORY_EMBEDDING_*) indexes them
-# for top-k semantic retrieval. Memory is built once per dialogue and cached on disk.
-#   MEMORY_LLM_MODEL           extraction LLM (default deepseek-v4-flash)
-#   MEMORY_EMBEDDING_MODEL     retrieval embedding model (e.g. baai/bge-m3)
-#   MEMORY_EMBEDDING_DIMS      embedding dimension (e.g. 1024)
-#   MEMORY_EMBEDDING_API_KEY   embedding service key
-#   MEMORY_EMBEDDING_BASE_URL  embedding service base url (OpenAI-compatible bge-m3)
-#   SUPERMEMORY_LANGUAGE       en (default) | cn  (fact-extraction language)
-#   SUPERMEMORY_RETRIEVAL_MODE profile (default, static+dynamic profile + relevant memories)
-#                              | search (top-k semantic retrieval only)
-#   SUPERMEMORY_MAX_MEMORIES   max facts to extract per dialogue (default 40)
 
 set -euo pipefail
+
+api_env_help() {
+  cat <<'EOF'
+API configuration:
+  The benchmark uses separate OpenAI-compatible endpoints for answer generation,
+  judging, memory construction, and embeddings. Example:
+
+    export GENERATION_API_KEY="xxx"
+    export JUDGE_API_KEY="xxx"
+    export MEMORY_API_KEY="xxx"
+    export MEMORY_EMBEDDING_API_KEY="xxx"
+
+    export GENERATION_BASE_URL="https://openrouter.ai/api/v1"
+    export JUDGE_BASE_URL="https://api.deepseek.com"
+
+    export MEMORY_BASE_URL="https://api.deepseek.com"
+    export MEMORY_LLM_MODEL="deepseek-v4-flash"
+
+    export MEMORY_EMBEDDING_MODEL="baai/bge-m3"
+    export MEMORY_EMBEDDING_DIMS="1024"
+    export MEMORY_EMBEDDING_BASE_URL="https://openrouter.ai/api/v1"
+
+  Accepted aliases:
+    GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY
+    JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY
+
+  CLI overrides (per run):
+    --base-url URL           generation model base URL
+    --api-key KEY            generation API key
+    --judge-base-url URL     judge model base URL
+    --judge-api-key KEY      judge API key
+    --model NAME             generation model name
+    --judge-model NAME       judge model name
+
+  Optional baseline-specific variables:
+    MEMGPT_MAX_STEPS, MEMGPT_INGEST_BATCH_SIZE, MEMGPT_LANGUAGE
+    MEMORYBANK_LANGUAGE, MEMORYBANK_DISABLE_SUMMARY
+    SUPERMEMORY_LANGUAGE, SUPERMEMORY_RETRIEVAL_MODE, SUPERMEMORY_MAX_MEMORIES
+EOF
+}
 
 TASKS=("personalized_memory_use" "valid_memory_selection" "memory_evidence_conflict" "contextual_scope_control" "objective_fact_judgment")
 METHODS=("NoMemory" "RawDialogue" "MemZero" "A-MEM" "LightMem" "MemoryBank" "NaiveRAG" "MemGPT" "Supermemory")
@@ -93,7 +83,9 @@ SCHEDULE_BY="model"
 ANSWER_SYSTEM_EXTRA_INSTRUCTION="${ANSWER_SYSTEM_EXTRA_INSTRUCTION-}"
 
 usage() {
-  sed -n '2,26p' "$0"
+  sed -n '3,12p' "$0"
+  echo ""
+  api_env_help
   cat <<'EOF'
 
 Options:

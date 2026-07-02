@@ -37,7 +37,7 @@ from .common import jsonable_memories, parse_dialogue_to_messages
 
 METHOD = "MemoryBank"
 
-MEMORYBANK_DIR = REPO_ROOT / "methods" / "MemoryBank-SiliconFriend"
+MEMORYBANK_DIR = REPO_ROOT / "baselines" / "memorybank" / "vendor"
 MEMORYBANK_BANK_DIR = MEMORYBANK_DIR / "memory_bank"
 
 DEFAULT_USER_NAME = "User"

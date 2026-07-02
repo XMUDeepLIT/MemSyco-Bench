@@ -100,10 +100,6 @@ for example in iter_dataset():
 
 A model under evaluation should receive only the condition-specific context and `question`. Fields under `memory` and `evaluation` are gold annotations for evaluation and analysis; they must not be exposed to the answer model unless an explicitly oracle-style condition is being studied.
 
-## Release Notes
+## Schema
 
-Version `1.2` uses the five canonical task identifiers listed above.
-
-Version `1.1` removes multiple-choice fields (`evaluation.options`, `evaluation.gold_option`). All tasks are evaluated as open-ended questions with LLM judges.
-
-Version `1.0` replaces the previous heterogeneous release layout. Construction-only fields such as dialogue spans, validation flags, duplicated source text, and session-generation metadata were removed. Dialogue turns now use standard lowercase `role` values and content without duplicated `User:` or `Assistant:` prefixes.
+The current release uses schema version `1.2` with five canonical task identifiers and open-ended LLM-judged evaluation. Dialogue turns use lowercase `role` values (`user`, `assistant`) and plain `content` without duplicated speaker prefixes.

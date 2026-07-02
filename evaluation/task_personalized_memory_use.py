@@ -47,11 +47,14 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
+from baselines import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
 TEST_JSONL = REPO_ROOT / "data" / "personalized_memory_use.jsonl"
 OUTPUT_RESULTS_JSON = (
-    REPO_ROOT / "output_data" / "current_runs" / "personalized_memory_use_open_results.json"
+    REPO_ROOT
+    / "output_data"
+    / "personalized_memory_use"
+    / "personalized_memory_use_results.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"

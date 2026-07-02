@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .base import BaselineContext, BaselineEvalConfig
-from .lightmem_toolkit import build_lightmem_toolkit_context
+from .toolkit.runner import build_lightmem_toolkit_context
 
 
 METHODS = ("MemZero",)

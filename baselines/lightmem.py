@@ -16,7 +16,7 @@ from .common import (
     sample_user_id,
     timestamp_for_turn,
 )
-from .lightmem_toolkit import _prepare_import_path
+from .toolkit.runner import _prepare_import_path
 
 
 METHOD = "LightMem"

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from .base import BaselineContext, BaselineEvalConfig
-from .lightmem_toolkit import build_lightmem_toolkit_context
+from .toolkit.runner import build_lightmem_toolkit_context
 
 
-METHOD = "NaiveRAG"
+METHOD = "A-MEM"
 
 
 def build_context(
@@ -14,5 +14,4 @@ def build_context(
     *,
     sample_key: str | int | None = None,
 ) -> BaselineContext:
-    """Simple turn-level RAG: one dialogue turn -> one embedded chunk -> top-k retrieve."""
     return build_lightmem_toolkit_context(METHOD, prior_dialogue, user_question, eval_config, sample_key=sample_key)

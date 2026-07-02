@@ -27,8 +27,8 @@ if str(REPO_ROOT) not in sys.path:
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from baseline_adapters import BaselineContext, BaselineEvalConfig
-from baseline_adapters.common import (
+from baselines import BaselineContext, BaselineEvalConfig
+from baselines.common import (
     format_retrieved_memories,
     jsonable_memories,
     parse_dialogue_to_messages,
@@ -365,8 +365,8 @@ def _remove_native_lightmem_save_dir(save_dir: str) -> None:
 
 
 def _open_native_lightmem_for_retrieval(config: dict[str, Any], *, method: str) -> Any:
-    from baseline_adapters.lightmem import _is_full_method, retrieval_only_lightmem_config
-    from baseline_adapters.lightmem_toolkit import _prepare_import_path
+    from baselines.lightmem import _is_full_method, retrieval_only_lightmem_config
+    from baselines.toolkit.runner import _prepare_import_path
 
     _prepare_import_path()
     from lightmem.memory.lightmem import LightMemory  # type: ignore
@@ -452,7 +452,7 @@ def _build_toolkit_entry(
     *,
     digest: str,
 ) -> _MemoryEntry:
-    from baseline_adapters.lightmem_toolkit import (
+    from baselines.toolkit.runner import (
         _apply_api_overrides,
         _format_llm_model_for_method,
         _load_method_config,
@@ -545,13 +545,13 @@ def _build_native_lightmem_entry(
     *,
     digest: str,
 ) -> _MemoryEntry:
-    from baseline_adapters.lightmem import (
+    from baselines.lightmem import (
         _is_full_method,
         _load_native_lightmem_config,
         ingest_full_lightmem,
         ingest_raw_dialogue_lightmem,
     )
-    from baseline_adapters.lightmem_toolkit import _prepare_import_path
+    from baselines.toolkit.runner import _prepare_import_path
 
     _prepare_import_path()
     from lightmem.memory.lightmem import LightMemory  # type: ignore
@@ -727,7 +727,7 @@ def build_cached_baseline_context(
     sample_key: str | int | None = None,
 ) -> BaselineContext:
     if eval_config.method not in _TOOLKIT_METHODS and eval_config.method not in _NATIVE_LIGHTMEM_METHODS:
-        from baseline_adapters.registry import build_baseline_context
+        from baselines.registry import build_baseline_context
 
         return build_baseline_context(
             prior_dialogue,
@@ -754,15 +754,15 @@ def build_cached_baseline_context(
     )
 
 
-def patch_eval_baseline_context(eval_module: Any) -> None:
+def patch_eval_memory_context(eval_module: Any) -> None:
     eval_module.build_baseline_context = build_cached_baseline_context
-    import baseline_adapters as _baseline_adapters
+    import baselines as _baselines
 
-    _baseline_adapters.build_baseline_context = build_cached_baseline_context
+    _baselines.build_baseline_context = build_cached_baseline_context
 
 
 def patch_eval_args(eval_module: Any) -> None:
-    patch_eval_baseline_context(eval_module)
+    patch_eval_memory_context(eval_module)
     original_parse_args = eval_module.parse_args
 
     def _parse_args_cached() -> Any:

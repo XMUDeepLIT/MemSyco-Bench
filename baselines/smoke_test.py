@@ -7,10 +7,10 @@ meant to be run manually before trusting a full evaluation run.
 Usage:
 
     # default: run every smoke test that has its services available
-    python -m baseline_adapters.smoke_test
+    python -m baselines.smoke_test
 
     # a single method
-    python -m baseline_adapters.smoke_test --method MemoryBank
+    python -m baselines.smoke_test --method MemoryBank
 
 Exit codes:
     0  every selected smoke test passed (or was skipped because its service was
@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from baseline_adapters import (  # noqa: E402
+from baselines import (  # noqa: E402
     BaselineContext,
     build_baseline_context,
     build_baseline_eval_config,
@@ -129,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
     methods = args.method or list(SUPPORTED_METHODS)
 
     print("=" * 60)
-    print("baseline_adapters smoke test")
+    print("baselines smoke test")
     print(f"methods: {', '.join(methods)}")
     print("=" * 60)
 

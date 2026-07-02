@@ -1,7 +1,7 @@
 {
   "method": "NaiveRAG",
   "top_k": 10,
-  "config_path": "methods/LightMem/src/lightmem/memory_toolkits/configs/NaiveRAG.json",
+  "config_path": "baselines/toolkit/vendor/configs/NaiveRAG.json",
   "save_root": "output_data/baseline_eval_memory",
   "api_key_env": "MEMORY_API_KEY",
   "base_url_env": "MEMORY_BASE_URL",

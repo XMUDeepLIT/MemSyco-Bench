@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .base import BaselineContext, BaselineEvalConfig, REPO_ROOT
-from .common import (
+from ..base import BaselineContext, BaselineEvalConfig, REPO_ROOT
+from ..common import (
     format_retrieved_memories,
     jsonable_memories,
     parse_dialogue_to_messages,
@@ -16,12 +16,12 @@ from .common import (
     timestamp_for_turn,
 )
 
+TOOLKIT_VENDOR_DIR = REPO_ROOT / "baselines" / "toolkit" / "vendor"
+DEFAULT_TOOLKIT_CONFIG_DIR = TOOLKIT_VENDOR_DIR / "configs"
+VENDORED_MEM0_PARENT_DIR = TOOLKIT_VENDOR_DIR / "memories" / "layers" / "baselines"
+LIGHTMEM_SRC_DIR = REPO_ROOT / "baselines" / "lightmem" / "vendor" / "src"
 
-LIGHTMEM_TOOLKIT_DIR = REPO_ROOT / "methods" / "LightMem" / "src" / "lightmem" / "memory_toolkits"
-DEFAULT_LIGHTMEM_CONFIG_DIR = LIGHTMEM_TOOLKIT_DIR / "configs"
-VENDORED_MEM0_PARENT_DIR = LIGHTMEM_TOOLKIT_DIR / "memories" / "layers" / "baselines"
-
-LIGHTMEM_TOOLKIT_METHODS = ("NaiveRAG", "A-MEM", "MemZero")
+TOOLKIT_METHODS = ("NaiveRAG", "A-MEM", "MemZero")
 
 
 def build_lightmem_toolkit_context(
@@ -32,8 +32,8 @@ def build_lightmem_toolkit_context(
     *,
     sample_key: str | int | None = None,
 ) -> BaselineContext:
-    if method not in LIGHTMEM_TOOLKIT_METHODS:
-        raise ValueError(f"Unsupported LightMem toolkit method: {method!r}")
+    if method not in TOOLKIT_METHODS:
+        raise ValueError(f"Unsupported toolkit baseline method: {method!r}")
 
     _prepare_import_path()
     config_dict = _load_method_config(method, eval_config)
@@ -79,14 +79,14 @@ def build_lightmem_toolkit_context(
 
 def _prepare_import_path() -> None:
     os.environ.setdefault("MEM0_TELEMETRY", "False")
-    if not LIGHTMEM_TOOLKIT_DIR.is_dir():
-        raise FileNotFoundError(f"LightMem memory_toolkits directory not found: {LIGHTMEM_TOOLKIT_DIR}")
+    if not TOOLKIT_VENDOR_DIR.is_dir():
+        raise FileNotFoundError(f"Toolkit vendor directory not found: {TOOLKIT_VENDOR_DIR}")
     if not VENDORED_MEM0_PARENT_DIR.is_dir():
         raise FileNotFoundError(f"Vendored Mem0 directory not found: {VENDORED_MEM0_PARENT_DIR}")
     import_paths = (
         str(VENDORED_MEM0_PARENT_DIR),
-        str(LIGHTMEM_TOOLKIT_DIR),
-        str((REPO_ROOT / "methods" / "LightMem" / "src").resolve()),
+        str(TOOLKIT_VENDOR_DIR),
+        str(LIGHTMEM_SRC_DIR.resolve()),
     )
     for path in reversed(import_paths):
         if path not in sys.path:
@@ -109,14 +109,14 @@ def _drop_nonvendored_mem0_modules() -> None:
 def _load_method_config(method: str, eval_config: BaselineEvalConfig) -> dict[str, Any]:
     config_path = eval_config.config_path
     if config_path is None:
-        config_path = DEFAULT_LIGHTMEM_CONFIG_DIR / f"{method}.json"
+        config_path = DEFAULT_TOOLKIT_CONFIG_DIR / f"{method}.json"
     config_path = Path(config_path)
     if not config_path.is_file():
         raise FileNotFoundError(config_path)
     with config_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"LightMem config must be a JSON object: {config_path}")
+        raise ValueError(f"Toolkit config must be a JSON object: {config_path}")
     return dict(data)
 
 

@@ -47,7 +47,7 @@ REPO_ROOT = SCRIPT_DIR.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
+from baselines import BASELINE_METHODS, BaselineEvalConfig, build_baseline_context, build_baseline_eval_config
 
 
 TEST_JSONL = REPO_ROOT / "data" / "contextual_scope_control.jsonl"

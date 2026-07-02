@@ -25,7 +25,7 @@ This repository is for the **MemSyco-Bench** project, a comprehensive benchmark 
 - Introduces five complementary preference-memory evaluation tasks
 - Compares no-memory, raw-dialogue, and memory-system settings
 - Tests both helpful preference use and failures caused by stale, conflicting, or overgeneralized memory
-- Provides 1,550 final samples, standardized evaluation code, and unified baseline adapters
+- Provides 1,550 final samples, standardized evaluation code, and unified baselines
 
 <details>
 <summary>
@@ -113,14 +113,15 @@ Five representative examples from the released benchmark:
 <h2 id="getting-started">🔧 Getting Started</h2>
 
 MemSyco-Bench treats all nine evaluation settings as peers. Integration lives in
-[`baseline_adapters/`](baseline_adapters/); [`methods/`](methods/) only vendors third-party
-code needed by four of the memory baselines (see [`methods/README.md`](methods/README.md)).
+[`baselines/`](baselines/).
 
 ```text
-baseline_adapters/   unified interface for all memory baselines and controls
-evaluation/          task runners, judging, and optimized memory reuse
-data/                released benchmark JSONL files
-methods/LightMem/    vendored upstream sources (not the benchmark core)
+baselines/             unified interface for all memory baselines and controls
+  toolkit/vendor/      MemZero, A-MEM, NaiveRAG shared toolkit code
+  lightmem/vendor/     native LightMem package
+  memorybank/vendor/   MemoryBank helper code
+evaluation/            task runners, judging, and optimized memory reuse
+data/                  released benchmark JSONL files
 ```
 
 <h2 id="installation-guide">🛠 Installation Guide</h2>
@@ -144,30 +145,13 @@ pip install -r requirements.txt
 pip install -r requirements-memory-baselines.txt
 ```
 
-<h3 id="api-configuration">API Configuration</h3>
-
-The benchmark uses separate OpenAI-compatible endpoints for answer generation, judging, memory construction, and embeddings.
-
-```bash
-export GENERATION_API_KEY="xxx"
-export JUDGE_API_KEY="xxx"
-export MEMORY_API_KEY="xxx"
-export MEMORY_EMBEDDING_API_KEY="xxx"
-
-export GENERATION_BASE_URL="https://openrouter.ai/api/v1"
-export JUDGE_BASE_URL="https://api.deepseek.com"
-
-export MEMORY_BASE_URL="https://api.deepseek.com"
-export MEMORY_LLM_MODEL="deepseek-v4-flash"
-
-export MEMORY_EMBEDDING_MODEL="baai/bge-m3"
-export MEMORY_EMBEDDING_DIMS="1024"
-export MEMORY_EMBEDDING_BASE_URL="https://openrouter.ai/api/v1"
-```
+This also installs the vendored native `lightmem` package from `baselines/lightmem/vendor/`
+in editable mode.
 
 <h2 id="running-examples">🚀 Running Examples</h2>
 
-Run the five-task evaluation suite:
+Configure API keys and endpoints (see `./scripts/run_benchmark.sh --help`), then run the
+five-task evaluation suite:
 
 ```bash
 ./scripts/run_benchmark.sh
@@ -185,13 +169,9 @@ Run a small example with one task and two memory settings:
 The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`,
 `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the
 [Evaluation README](evaluation/README.md) for the unified task runner and the
-[Baseline Adapters README](baseline_adapters/README.md) for per-method configuration.
+[Baselines README](baselines/README.md) for per-method configuration.
 
 All generated results, completion caches, memory stores, and logs are written under `output_data/`, which is intentionally ignored by Git.
-
-<!-- <h2 id="contribution--contact">📬 Contribution & Contact</h2>
-
-Questions, bug reports, and benchmark integration proposals are welcome through [GitHub Issues](https://github.com/Eric-Xiang-526/Preference-Memory/issues). -->
 
 <h2 id="citation">🍀 Citation</h2>
 
@@ -205,12 +185,4 @@ If you find MemSyco-Bench helpful, please cite the repository. The paper citatio
   year={2026}
 }
 ```
-
-<!-- <h2 id="stars">⭐ Stars History</h2>
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Eric-Xiang-526/Preference-Memory&type=Date)](https://www.star-history.com/#Eric-Xiang-526/Preference-Memory&Date)
-
-</div> -->
 

@@ -33,13 +33,13 @@ DEFAULT_OUTPUT_JSON = (
 def _install_missing_baseline_stub() -> None:
     """Let raw-dialogue evaluation run when optional baseline code is absent."""
     try:
-        spec = importlib.util.find_spec("baseline_adapters")
+        spec = importlib.util.find_spec("baselines")
     except (ImportError, ValueError):
         spec = None
     if spec is not None:
         return
 
-    stub = types.ModuleType("baseline_adapters")
+    stub = types.ModuleType("baselines")
     stub.BASELINE_METHODS = ()
 
     class BaselineEvalConfig:
@@ -47,14 +47,14 @@ def _install_missing_baseline_stub() -> None:
 
     def unavailable(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError(
-            "Optional baseline_adapters is unavailable. Run raw-dialogue "
+            "Optional baselines package is unavailable. Run raw-dialogue "
             "evaluation without --memory-method."
         )
 
     stub.BaselineEvalConfig = BaselineEvalConfig
     stub.build_baseline_context = unavailable
     stub.build_baseline_eval_config = unavailable
-    sys.modules["baseline_adapters"] = stub
+    sys.modules["baselines"] = stub
 
 
 def _load_base_module() -> Any:
