@@ -886,29 +886,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--base-url",
         default=DEFAULT_GENERATION_BASE_URL,
-        help="generation model 的 OpenAI 兼容 base_url。",
+        help="OpenAI-compatible base URL for the generation model.",
     )
     parser.add_argument(
         "--api-key",
         default=DEFAULT_GENERATION_API_KEY,
-        help="generation model 的 API key，默认读 GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。",
+        help="Generation API key. Defaults to GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY.",
     )
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL_NAME)
     parser.add_argument(
         "--judge-base-url",
         default=DEFAULT_JUDGE_BASE_URL,
-        help="judge model 的 OpenAI 兼容 base_url，默认读 JUDGE_BASE_URL。",
+        help="OpenAI-compatible base URL for the judge model. Defaults to JUDGE_BASE_URL.",
     )
     parser.add_argument(
         "--judge-api-key",
         default=DEFAULT_JUDGE_API_KEY,
-        help="judge model 的 API key，默认读 JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。",
+        help="Judge API key. Defaults to JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY.",
     )
     parser.add_argument(
         "--judge-request-timeout",
         type=float,
         default=None,
-        help="judge model 单次 HTTP 请求超时秒数；默认沿用 --request-timeout。",
+        help="Per-request HTTP timeout for the judge model. Defaults to --request-timeout.",
     )
     parser.add_argument("--limit", type=int, default=LIMIT)
     parser.add_argument("--workers", type=int, default=WORKERS)
@@ -917,7 +917,7 @@ def parse_args() -> argparse.Namespace:
         "--judge-max-requests-per-minute",
         type=int,
         default=None,
-        help="judge model 每分钟最多请求数；默认沿用 --max-requests-per-minute。",
+        help="Maximum judge requests per minute. Defaults to --max-requests-per-minute.",
     )
     parser.add_argument("--api-max-retries", type=int,
                         default=DEFAULT_API_MAX_RETRIES)
@@ -948,7 +948,7 @@ def parse_args() -> argparse.Namespace:
         "--memory-method",
         choices=BASELINE_METHODS,
         default=None,
-        help="Enable a LightMem memory layer for the with_memory branch.",
+        help="Enable a memory baseline for the with_memory branch.",
     )
     parser.add_argument("--memory-top-k", type=int, default=None)
     parser.add_argument("--memory-baseline-config", type=Path, default=None)
@@ -970,7 +970,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--trace-api",
         action="store_true",
-        help="打印 [api-req] start/done：用于确认请求已发出、仍在等 HTTP 响应。",
+        help="Print [api-req] start/done lines to confirm HTTP requests are in flight.",
     )
     return parser.parse_args()
 
@@ -996,13 +996,13 @@ def main() -> None:
 
     if not api_key:
         raise RuntimeError(
-            "请通过 --api-key 传入 generation API key，或设置 "
-            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
+            "Pass --api-key or set "
+            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY."
         )
     if not judge_api_key:
         raise RuntimeError(
-            "请通过 --judge-api-key 传入 judge API key，或设置 "
-            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
+            "Pass --judge-api-key or set "
+            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY."
         )
     if not args.test_jsonl.is_file():
         raise FileNotFoundError(args.test_jsonl)
@@ -1010,7 +1010,7 @@ def main() -> None:
     tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
     if not tasks:
         raise RuntimeError(
-            f"{args.test_jsonl} 中没有可评测的 valid_memory_selection 样本。")
+            f"{args.test_jsonl} contains no eligible valid_memory_selection samples.")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {
@@ -1086,10 +1086,10 @@ def main() -> None:
     else:
         eval_sequence = "with_memory only (raw dialogue)"
     print(
-        f"已启动 {len(tasks)} 条任务，线程池并发 {n_workers}。"
-        f" 每条样本调用：答题({result_setting}) -> 裁判；"
-        f" sequence={eval_sequence}；"
-        " 首条完成前进度条可能停在 0%，并非卡死。",
+        f"Started {len(tasks)} tasks with thread-pool concurrency {n_workers}. "
+        f"Each sample runs answer ({result_setting}) then judge; "
+        f"sequence={eval_sequence}; "
+        "progress may stay at 0% until the first sample completes.",
         flush=True,
     )
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
@@ -1099,7 +1099,7 @@ def main() -> None:
             as_completed(futures),
             total=len(futures),
             desc=f"preference update open ({result_setting}+judge)",
-            unit="条",
+            unit="sample",
         ):
             results[futures[fut]] = fut.result()
 
@@ -1174,7 +1174,7 @@ def main() -> None:
 
     selected_metrics = metrics[result_setting]
     print(
-        f"完成 {len(final_results)} 条，结果已写入 {args.output}\n"
+        f"Finished {len(final_results)} samples; results written to {args.output}\n"
         f"{result_setting}: uses_latest={selected_metrics['uses_latest_preference_avg']:.4f}, "
         f"outdated_contam={selected_metrics['outdated_preference_contamination_avg']:.4f}, "
         f"valid_selection_pass={selected_metrics['valid_selection_pass_avg']:.4f}"

@@ -1,30 +1,33 @@
 # Baseline Adapters
 
-This directory is the evaluation-side integration layer for memory baselines.
+This directory is the **first-class integration layer** for all memory-related evaluation
+settings in MemSyco-Bench. The benchmark runner talks only to adapters here—not to `methods/`
+directly.
 
-- `methods/` keeps only the vendored source code needed by active baseline adapters.
-- `baseline_adapters/` exposes a small common interface used by the benchmark scripts.
-- Active adapters: `lightmem.py`, `naive_rag.py`, `amem.py`, `memzero.py`, `memorybank.py`,
-  `supermemory.py`, and `memgpt.py`.
-- Each baseline also gets an evaluation config in `baseline_adapters/configs/<Method>.json`.
-- Method-specific default configs stay with their source repository when available, for example
-  `methods/LightMem/src/lightmem/memory_toolkits/configs/*.json`.
-- A benchmark run can override the evaluation config with `--memory-baseline-config`.
-- A benchmark run can override a method's native config with `--memory-config`.
+## Nine peer evaluation settings
 
-Supported memory methods:
+| Setting | Adapter | Notes |
+|---------|---------|-------|
+| `NoMemory` | evaluation runner | no prior dialogue injected |
+| `RawDialogue` | evaluation runner | full relevant dialogue as context |
+| `MemZero` | `memzero.py` | toolkit layer via vendored `memory_toolkits` |
+| `A-MEM` | `amem.py` | toolkit layer via vendored `memory_toolkits` |
+| `NaiveRAG` | `naive_rag.py` | toolkit layer via vendored `memory_toolkits` |
+| `LightMem` | `lightmem.py` | native LightMem memory system |
+| `MemoryBank` | `memorybank.py` | in-repo re-implementation |
+| `MemGPT` | `memgpt.py` | in-repo re-implementation |
+| `Supermemory` | `supermemory.py` | in-repo re-implementation |
 
-`MemZero`, `NaiveRAG`, `A-MEM`, `LightMem`, `MemoryBank`, `Supermemory`, `MemGPT`
+Each memory baseline also has a default evaluation config in `configs/<Method>.json`.
+Override at runtime with `--memory-baseline-config` or `--memory-config`.
 
-The benchmark scripts should call only:
+## Public API
+
+Benchmark scripts should call only:
 
 ```python
 from baseline_adapters import BASELINE_METHODS, build_baseline_context, build_baseline_eval_config
 ```
-
-The benchmark scripts build a `BaselineEvalConfig` from the per-method JSON first, then apply
-command-line overrides such as `--memory-top-k`, `--memory-config`, `--memory-api-key`, and
-`--memory-base-url`.
 
 Each adapter receives:
 
@@ -32,5 +35,14 @@ Each adapter receives:
 prior_dialogue + user_question + BaselineEvalConfig
 ```
 
-and returns a `BaselineContext` containing the text to inject into the answer model prompt plus
-the structured retrieved memories to save in the result JSON.
+and returns a `BaselineContext` with the text injected into the answer-model prompt plus
+structured retrieved memories for the result JSON.
+
+Command-line overrides such as `--memory-top-k`, `--memory-api-key`, and `--memory-base-url`
+are applied on top of the per-method JSON defaults.
+
+## Relationship to `methods/`
+
+Four baselines (`MemZero`, `A-MEM`, `NaiveRAG`, `LightMem`) depend on vendored upstream code
+under `methods/LightMem/`. That tree is a **dependency checkout**, not the benchmark core.
+See [`methods/README.md`](../methods/README.md) for details.

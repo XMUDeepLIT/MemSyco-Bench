@@ -145,6 +145,4 @@ def _apply_api_overrides(method: str, config: dict[str, Any], eval_config: Basel
 
 
 def _format_llm_model_for_method(method: str, model: str) -> str:
-    if method == "LangMem" and ":" not in model:
-        return f"openai:{model}"
     return model

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Eric-Xiang-526/Preference-Memory/data/schema.json",
+  "$id": "https://github.com/XMUDeepLIT/MemSyco-Bench/data/schema.json",
   "title": "MemSyco-Bench Example",
   "type": "object",
   "additionalProperties": false,

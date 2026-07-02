@@ -4,10 +4,10 @@
 # and Objective Fact Judgment.
 #
 # Examples:
-#   ./scripts/eval_baseline_opt_v2_short.sh
-#   ./scripts/eval_baseline_opt_v2_short.sh --limit 5 --trace-api
-#   ./scripts/eval_baseline_opt_v2_short.sh --tasks objective_fact_judgment --methods RawDialogue,MemZero --limit 50
-#   ./scripts/eval_baseline_opt_v2_short.sh --limit 0
+#   ./scripts/run_benchmark.sh
+#   ./scripts/run_benchmark.sh --limit 5 --trace-api
+#   ./scripts/run_benchmark.sh --tasks objective_fact_judgment --methods RawDialogue,MemZero --limit 50
+#   ./scripts/run_benchmark.sh --limit 0
 #
 # Limit:
 #   --limit 20 runs 20 samples per task/method.
@@ -69,8 +69,8 @@ LIMIT=20
 WORKERS=1
 OUTER_WORKERS=1
 MEMORY_TOP_K=10
-OUTPUT_ROOT="output_data/baseline_opt_v2_runs_short_extra_instruction"
-MEMORY_SAVE_ROOT_BASE="output_data/baseline_opt_v2_memory_runs"
+OUTPUT_ROOT="output_data/runs"
+MEMORY_SAVE_ROOT_BASE="output_data/memory_stores"
 MODELS=("")
 BASE_URL=""
 ARG_API_KEY=""
@@ -81,7 +81,7 @@ REQUEST_TIMEOUT=60
 JUDGE_REQUEST_TIMEOUT=60
 API_MAX_RETRIES=1
 CURRENT_DATE="${EVAL_CURRENT_DATE-}"
-COMPLETION_CACHE_PATH="output_data/completion_cache/baseline_opt_v2_completions.sqlite"
+COMPLETION_CACHE_PATH="output_data/completion_cache/benchmark_completions.sqlite"
 COMPLETION_CACHE_PATH_SET=0
 NO_COMPLETION_CACHE=0
 NO_DISK_COMPLETION_CACHE=0
@@ -255,7 +255,7 @@ task_spec() {
       SCRIPT_PATH="evaluation/run_task.py"
       TEST_JSONL="data/objective_fact_judgment.jsonl"
       OUTPUT_SUFFIX="objective_fact_judgment_results_final.json"
-      SUPPORTS_NO_QUESTION_FILTER=0
+      SUPPORTS_NO_QUESTION_FILTER=1
       ;;
     *)
       echo "Unsupported task '$1'. Use personalized_memory_use, valid_memory_selection, memory_evidence_conflict, contextual_scope_control, objective_fact_judgment." >&2

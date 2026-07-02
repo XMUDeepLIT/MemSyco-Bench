@@ -8,25 +8,25 @@
       "file": "personalized_memory_use.jsonl",
       "samples": 300,
       "memory_policy": "use",
-      "sha256": "6140d63fa2f1952b794466542ff87f4ed586d8137e40acafb9cb192b18f06025"
+      "sha256": "7e4384008478265e338c8571a0f6d8e7a8720439f97dff8e735c1c858f613e17"
     },
     "valid_memory_selection": {
       "file": "valid_memory_selection.jsonl",
       "samples": 350,
       "memory_policy": "update",
-      "sha256": "afaba4b6dff5163469fa6bdabd5e492b8fbe8348c6af6a2732386ba740dd040e"
+      "sha256": "7db0f062306a925f7cea9ea9cfb32cb94bbe2bb17999eff3e4a764aeabc4d498"
     },
     "memory_evidence_conflict": {
       "file": "memory_evidence_conflict.jsonl",
       "samples": 300,
       "memory_policy": "defer_to_evidence",
-      "sha256": "dc3ffe396251c58fbf5ca77458d4bd3c405d2322dda8f65f9996d082568f16be"
+      "sha256": "adf9a924bae5bf4d554c0f7bf69c8c867037caf13c9839afa93605cb39442823"
     },
     "contextual_scope_control": {
       "file": "contextual_scope_control.jsonl",
       "samples": 300,
       "memory_policy": "constrain_to_scope",
-      "sha256": "43c09e35b57ecfaabb76f08fee0565d96d0b81e3b90a3fa8e82c23a83f272e20"
+      "sha256": "a233ee49a17434255fd372a95284f57bfa3bbbbcbb5cf9be2d0c6c793865d748"
     },
     "objective_fact_judgment": {
       "file": "objective_fact_judgment.jsonl",

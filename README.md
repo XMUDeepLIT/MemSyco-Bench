@@ -112,24 +112,37 @@ Five representative examples from the released benchmark:
 
 <h2 id="getting-started">🔧 Getting Started</h2>
 
-First, install the dependencies for MemSyco-Bench.
+MemSyco-Bench treats all nine evaluation settings as peers. Integration lives in
+[`baseline_adapters/`](baseline_adapters/); [`methods/`](methods/) only vendors third-party
+code needed by four of the memory baselines (see [`methods/README.md`](methods/README.md)).
 
-```bash
-pip install -r requirements.txt
+```text
+baseline_adapters/   unified interface for all memory baselines and controls
+evaluation/          task runners, judging, and optimized memory reuse
+data/                released benchmark JSONL files
+methods/LightMem/    vendored upstream sources (not the benchmark core)
 ```
 
 <h2 id="installation-guide">🛠 Installation Guide</h2>
 
-**To reduce dependency conflicts across memory frameworks, we recommend using a clean Conda environment:**
+**We recommend a clean Conda environment to reduce dependency conflicts:**
 
 ```bash
-conda create -n preference-memory python=3.10 -y
-conda activate preference-memory
+conda create -n memsyco-bench python=3.10 -y
+conda activate memsyco-bench
+```
 
+**Core install** (covers `NoMemory`, `RawDialogue`, `MemoryBank`, `MemGPT`, `Supermemory`):
+
+```bash
 pip install -r requirements.txt
 ```
 
-The requirements file installs the in-repository LightMem package in editable mode and includes the dependencies used by the active baseline adapters.
+**Full memory-baseline install** (adds `MemZero`, `A-MEM`, `NaiveRAG`, `LightMem`):
+
+```bash
+pip install -r requirements-memory-baselines.txt
+```
 
 <h3 id="api-configuration">API Configuration</h3>
 
@@ -157,19 +170,22 @@ export MEMORY_EMBEDDING_BASE_URL="https://openrouter.ai/api/v1"
 Run the five-task evaluation suite:
 
 ```bash
-./scripts/eval_baseline_opt_v2_short.sh
+./scripts/run_benchmark.sh
 ```
 
 Run a small example with one task and two memory settings:
 
 ```bash
-./scripts/eval_baseline_opt_v2_short.sh \
+./scripts/run_benchmark.sh \
   --tasks objective_fact_judgment \
   --methods RawDialogue,MemZero \
   --limit 5
 ```
 
-The default driver runs nine baselines: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the [Evaluation README](evaluation/README.md) for the unified task runner and the [Baseline Adapters README](baseline_adapters/README.md) for method-specific configuration.
+The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`,
+`LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the
+[Evaluation README](evaluation/README.md) for the unified task runner and the
+[Baseline Adapters README](baseline_adapters/README.md) for per-method configuration.
 
 All generated results, completion caches, memory stores, and logs are written under `output_data/`, which is intentionally ignored by Git.
 

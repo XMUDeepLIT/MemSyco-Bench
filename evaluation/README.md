@@ -24,12 +24,12 @@ python evaluation/run_task.py memory_evidence_conflict --optimized --memory-meth
 python evaluation/run_task.py objective_fact_judgment --help
 ```
 
-`--optimized` enables disk-backed memory reuse and forces one worker per task-method job. The repository-level `scripts/eval_baseline_opt_v2_short.sh` driver uses this mode automatically when running task and method matrices.
+`--optimized` enables disk-backed memory reuse and forces one worker per task-method job. The repository-level `scripts/run_benchmark.sh` driver uses this mode automatically when running task and method matrices.
 
 The `task_*.py` modules contain task-specific prompts, scoring, and result aggregation. They are implementation modules behind `run_task.py`; new users generally do not need to invoke them directly.
 
 Validate the complete task matrix without sending API requests:
 
 ```bash
-./scripts/eval_baseline_opt_v2_short.sh --dry-run --methods RawDialogue --limit 1
+./scripts/run_benchmark.sh --dry-run --methods RawDialogue --limit 1
 ```

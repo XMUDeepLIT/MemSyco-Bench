@@ -8,11 +8,9 @@ same question twice:
 
 It uses a judge model to score both answers.
 
-By default, only rows whose ``generated_question.question`` appears in
-``output_data/current_runs/objective_open_v2_results.json`` are evaluated
-(the same ~320-question subset as the memory_var open-ended benchmark). Pass
-``--no-question-filter`` to evaluate every eligible row in the jsonl (subject to
-``--limit``).
+By default, every eligible row in the jsonl is evaluated (subject to ``--limit``).
+Pass ``--question-filter-json`` to restrict evaluation to questions listed in a
+prior results file.
 
 The only prompt difference between the two answer settings is whether this block
 is appended to the system prompt:
@@ -67,10 +65,10 @@ from baseline_adapters import BASELINE_METHODS, BaselineEvalConfig, build_baseli
 
 TEST_JSONL = REPO_ROOT / "data" / "objective_fact_judgment.jsonl"
 OUTPUT_RESULTS_JSON = (
-    REPO_ROOT / "output_data" / "current_runs" / "objective_open_v2_results.json"
-)
-DEFAULT_QUESTION_FILTER_JSON = (
-    REPO_ROOT / "output_data" / "current_runs" / "objective_open_v2_results.json"
+    REPO_ROOT
+    / "output_data"
+    / "objective_fact_judgment"
+    / "objective_fact_judgment_results.json"
 )
 
 DEFAULT_MODEL_NAME = "deepseek-v4-flash"
@@ -103,7 +101,7 @@ DEFAULT_REQUEST_TIMEOUT_SEC = 180.0
 DEFAULT_CURRENT_DATE = os.environ.get("EVAL_CURRENT_DATE", "2025-06-01")
 
 _api_retry_log_lock = threading.Lock()
-# Set True from main() when --trace-api（观察「请求已发出 / 已返回」，与「重试」不同）。
+# Set True from main() when --trace-api (log HTTP request start/done, distinct from retries).
 API_HTTP_TRACE_ENABLED = False
 
 
@@ -1049,44 +1047,44 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--base-url",
         default=DEFAULT_GENERATION_BASE_URL,
-        help="generation model 的 OpenAI 兼容 base_url。",
+        help="OpenAI-compatible base URL for the generation model.",
     )
     parser.add_argument(
         "--api-key",
         default=DEFAULT_GENERATION_API_KEY,
-        help="generation model 的 API key，默认读 GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。",
+        help="Generation API key. Defaults to GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY.",
     )
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL_NAME)
     parser.add_argument(
         "--judge-base-url",
         default=DEFAULT_JUDGE_BASE_URL,
-        help="judge model 的 OpenAI 兼容 base_url，默认读 JUDGE_BASE_URL。",
+        help="OpenAI-compatible base URL for the judge model. Defaults to JUDGE_BASE_URL.",
     )
     parser.add_argument(
         "--judge-api-key",
         default=DEFAULT_JUDGE_API_KEY,
-        help="judge model 的 API key，默认读 JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。",
+        help="Judge API key. Defaults to JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY.",
     )
     parser.add_argument(
         "--judge-request-timeout",
         type=float,
         default=None,
-        help="judge model 单次 HTTP 请求超时秒数；默认沿用 --request-timeout。",
+        help="Per-request HTTP timeout for the judge model. Defaults to --request-timeout.",
     )
     parser.add_argument("--limit", type=int, default=LIMIT)
     parser.add_argument(
         "--question-filter-json",
         type=Path,
-        default=DEFAULT_QUESTION_FILTER_JSON,
+        default=None,
         help=(
-            "只评测题干出现在该 JSON 的 results[].generated_question.question 集合中的样本；"
-            "默认与 memory_var 评测结果对齐。"
+            "Optional JSON file whose results[].generated_question.question values "
+            "define the question allowlist."
         ),
     )
     parser.add_argument(
         "--no-question-filter",
         action="store_true",
-        help="禁用题干筛选，评测 jsonl 中所有符合条件的样本（仍受 --limit 约束）。",
+        help="Disable question filtering and evaluate every eligible row (still subject to --limit).",
     )
     parser.add_argument("--workers", type=int, default=WORKERS)
     parser.add_argument("--max-requests-per-minute", type=int, default=0)
@@ -1094,7 +1092,7 @@ def parse_args() -> argparse.Namespace:
         "--judge-max-requests-per-minute",
         type=int,
         default=None,
-        help="judge model 每分钟最多请求数；默认沿用 --max-requests-per-minute。",
+        help="Maximum judge requests per minute. Defaults to --max-requests-per-minute.",
     )
     parser.add_argument("--api-max-retries", type=int,
                         default=DEFAULT_API_MAX_RETRIES)
@@ -1124,7 +1122,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--completion-cache-path",
         type=Path,
-        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/objective_open_v2.sqlite")),
+        default=Path(os.environ.get("COMPLETION_CACHE_PATH", "output_data/completion_cache/objective_fact_judgment.sqlite")),
         help="SQLite cache for generation and judge completions.",
     )
     parser.add_argument(
@@ -1136,7 +1134,7 @@ def parse_args() -> argparse.Namespace:
         "--memory-method",
         choices=BASELINE_METHODS,
         default=None,
-        help="Enable a LightMem memory layer for the with_memory branch.",
+        help="Enable a memory baseline for the with_memory branch.",
     )
     parser.add_argument("--memory-top-k", type=int, default=None)
     parser.add_argument("--memory-baseline-config", type=Path, default=None)
@@ -1158,7 +1156,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--trace-api",
         action="store_true",
-        help="打印 [api-req] start/done：用于确认请求已发出、仍在等 HTTP 响应（此阶段不会出现 [api-retry]）。",
+        help="Print [api-req] start/done lines to confirm HTTP requests are in flight.",
     )
     return parser.parse_args()
 
@@ -1188,44 +1186,31 @@ def main() -> None:
     )
     if not api_key:
         raise RuntimeError(
-            "请通过 --api-key 传入 generation API key，或设置 "
-            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
+            "Pass --api-key or set GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY."
         )
     if not judge_api_key:
         raise RuntimeError(
-            "请通过 --judge-api-key 传入 judge API key，或设置 "
-            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
+            "Pass --judge-api-key or set JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY."
         )
     if not args.test_jsonl.is_file():
         raise FileNotFoundError(args.test_jsonl)
 
     question_allowlist: frozenset[str] | None = None
     question_filter_path: Path | None = None
-    auto_disabled_default_filter = False
-    if (
-        not args.no_question_filter
-        and args.question_filter_json == DEFAULT_QUESTION_FILTER_JSON
-        and args.test_jsonl.resolve() != TEST_JSONL.resolve()
-    ):
-        auto_disabled_default_filter = True
-        print(
-            "检测到使用了非默认 test_jsonl，且未显式指定 question filter；"
-            "已自动禁用默认题干筛选以适配当前数据集。"
-        )
-    if not args.no_question_filter and not auto_disabled_default_filter:
+    if not args.no_question_filter and args.question_filter_json is not None:
         question_filter_path = args.question_filter_json
         if not question_filter_path.is_file():
             raise FileNotFoundError(
-                f"题干筛选文件不存在: {question_filter_path}。"
-                " 请生成或放置该文件，或传入 --question-filter-json，或使用 --no-question-filter。"
+                f"Question filter file not found: {question_filter_path}. "
+                "Provide --question-filter-json or use --no-question-filter."
             )
         question_allowlist = load_question_text_allowlist(question_filter_path)
         if not question_allowlist:
             raise RuntimeError(
-                f"{question_filter_path} 中未解析到任何 results[].generated_question.question。"
+                f"No results[].generated_question.question entries found in {question_filter_path}."
             )
         print(
-            f"题干筛选: {question_filter_path}（{len(question_allowlist)} 个唯一题干）"
+            f"Question filter: {question_filter_path} ({len(question_allowlist)} unique questions)"
         )
 
     tasks = load_eligible_tasks(
@@ -1234,7 +1219,7 @@ def main() -> None:
         question_allowlist=question_allowlist,
     )
     if not tasks:
-        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 objective 样本。")
+        raise RuntimeError(f"No eligible objective_fact_judgment samples found in {args.test_jsonl}.")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {

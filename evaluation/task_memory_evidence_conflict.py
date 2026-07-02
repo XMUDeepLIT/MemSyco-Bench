@@ -973,7 +973,7 @@ def parse_args() -> argparse.Namespace:
         "--judge-request-timeout",
         type=float,
         default=None,
-        help="judge model 单次 HTTP 请求超时秒数；默认沿用 --request-timeout。",
+        help="Per-request HTTP timeout for the judge model. Defaults to --request-timeout.",
     )
     parser.add_argument("--limit", type=int, default=LIMIT)
     parser.add_argument("--workers", type=int, default=WORKERS)
@@ -982,7 +982,7 @@ def parse_args() -> argparse.Namespace:
         "--judge-max-requests-per-minute",
         type=int,
         default=None,
-        help="judge model 每分钟最多请求数；默认沿用 --max-requests-per-minute。",
+        help="Maximum judge requests per minute. Defaults to --max-requests-per-minute.",
     )
     parser.add_argument("--api-max-retries", type=int, default=DEFAULT_API_MAX_RETRIES)
     parser.add_argument("--api-retry-base-delay", type=float, default=DEFAULT_API_RETRY_BASE_DELAY_SEC)
@@ -1009,7 +1009,7 @@ def parse_args() -> argparse.Namespace:
         "--memory-method",
         choices=BASELINE_METHODS,
         default=None,
-        help="Enable a LightMem memory layer for the with_memory branch.",
+        help="Enable a memory baseline for the with_memory branch.",
     )
     parser.add_argument("--memory-top-k", type=int, default=None)
     parser.add_argument("--memory-baseline-config", type=Path, default=None)
@@ -1023,7 +1023,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--trace-api",
         action="store_true",
-        help="打印 [api-req] start/done，用于确认请求发出与返回。",
+        help="Print [api-req] start/done lines to confirm HTTP requests are in flight.",
     )
     return parser.parse_args()
 
@@ -1049,20 +1049,20 @@ def main() -> None:
 
     if not api_key:
         raise RuntimeError(
-            "请通过 --api-key 传入 generation API key，或设置 "
-            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY。"
+            "Pass --api-key or set "
+            "GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY."
         )
     if not judge_api_key:
         raise RuntimeError(
-            "请通过 --judge-api-key 传入 judge API key，或设置 "
-            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY。"
+            "Pass --judge-api-key or set "
+            "JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY."
         )
     if not args.test_jsonl.is_file():
         raise FileNotFoundError(args.test_jsonl)
 
     tasks = load_eligible_tasks(args.test_jsonl, max(1, int(args.limit)))
     if not tasks:
-        raise RuntimeError(f"{args.test_jsonl} 中没有可评测的 evidence-memory-conflict 样本。")
+        raise RuntimeError(f"{args.test_jsonl} contains no eligible memory_evidence_conflict samples.")
 
     request_timeout = float(args.request_timeout)
     client_kwargs: dict[str, Any] = {
