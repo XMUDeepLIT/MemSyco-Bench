@@ -2,7 +2,7 @@
 
 # MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
 
-[![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE)
+[![Static Badge](https://img.shields.io/badge/arxiv-2607.01071-ff0000?style=for-the-badge&labelColor=000)](https://arxiv.org/pdf/2607.01071) [![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE)
 
 <p>
   <a href="#about" style="text-decoration: none; font-weight: bold;">📖 About</a> ·
@@ -177,18 +177,18 @@ All generated results, completion caches, memory stores, and logs are written un
 
 Questions, bug reports, and benchmark integration proposals are welcome through [GitHub Issues](https://github.com/Eric-Xiang-526/Preference-Memory/issues). -->
 
-<!-- <h2 id="citation">🍀 Citation</h2>
+<h2 id="citation">🍀 Citation</h2>
 
 If you find MemSyco-Bench helpful, please cite the repository. The paper citation will be added after release.
 
 ```bibtex
-@misc{preference_memory_2026,
+@article{xiang2026memsyco,
   title        = {MemSyco-Bench: Benchmarking Sycophancy in Agent Memory},
-  year         = {2026},
-  howpublished = {\url{https://github.com/Eric-Xiang-526/Preference-Memory}},
-  note         = {Benchmark dataset and evaluation toolkit}
+  author={Xiang, Zhishang and Chen, Zerui and Tang, Yunbo and Wei, Zhimin and Ning, Ruqin and Lin, Yujie and Zhang, Qinggang and Su, Jinsong},
+  journal={arXiv preprint arXiv:2607.01071},
+  year={2026}
 }
-``` -->
+```
 
 <!-- <h2 id="stars">⭐ Stars History</h2>
 
@@ -197,3 +197,4 @@ If you find MemSyco-Bench helpful, please cite the repository. The paper citatio
 [![Star History Chart](https://api.star-history.com/svg?repos=Eric-Xiang-526/Preference-Memory&type=Date)](https://www.star-history.com/#Eric-Xiang-526/Preference-Memory&Date)
 
 </div> -->
+
