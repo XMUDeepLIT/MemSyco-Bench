@@ -183,7 +183,7 @@ If you find MemSyco-Bench helpful, please cite the repository. The paper citatio
 
 ```bibtex
 @article{xiang2026memsyco,
-  title        = {MemSyco-Bench: Benchmarking Sycophancy in Agent Memory},
+  title={MemSyco-Bench: Benchmarking Sycophancy in Agent Memory},
   author={Xiang, Zhishang and Chen, Zerui and Tang, Yunbo and Wei, Zhimin and Ning, Ruqin and Lin, Yujie and Zhang, Qinggang and Su, Jinsong},
   journal={arXiv preprint arXiv:2607.01071},
   year={2026}
