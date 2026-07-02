@@ -133,7 +133,9 @@ split_csv() {
   local value="$1"
   local -n out_ref="$2"
   local old_ifs="$IFS"
-  IFS=',' read -r -a out_ref <<< "$value"
+  # Accept comma- or space-separated lists (PowerShell may collapse commas to spaces).
+  value="${value//,/ }"
+  read -r -a out_ref <<< "$value"
   IFS="$old_ifs"
 }
 

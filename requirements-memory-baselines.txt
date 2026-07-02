@@ -81,7 +81,6 @@ pillow==11.3.0
 portalocker==3.2.0
 posthog==7.15.0
 propcache==0.5.2
-protobuf==6.32.1
 psutil==7.1.0
 pybase64==1.4.3
 pydantic_core==2.41.1

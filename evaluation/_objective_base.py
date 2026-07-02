@@ -1377,8 +1377,6 @@ def main() -> None:
     if question_allowlist is not None and question_filter_path is not None:
         payload["question_filter_json"] = str(question_filter_path.resolve())
         payload["question_filter_n_unique"] = len(question_allowlist)
-    if auto_disabled_default_filter:
-        payload["question_filter_auto_disabled"] = True
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8") as f:

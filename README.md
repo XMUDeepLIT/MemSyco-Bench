@@ -150,11 +150,18 @@ in editable mode.
 
 <h2 id="running-examples">🚀 Running Examples</h2>
 
-Configure API keys and endpoints (see `./scripts/run_benchmark.sh --help`), then run the
+Configure API keys and endpoints (see `./scripts/run_benchmark.sh --help` or
+`.\scripts\run_benchmark.ps1 --help` on Windows PowerShell), then run the
 five-task evaluation suite:
 
 ```bash
 ./scripts/run_benchmark.sh
+```
+
+On Windows PowerShell, use the wrapper (Git Bash required):
+
+```powershell
+.\scripts\run_benchmark.ps1
 ```
 
 Run a small example with one task and two memory settings:
@@ -163,6 +170,13 @@ Run a small example with one task and two memory settings:
 ./scripts/run_benchmark.sh \
   --tasks objective_fact_judgment \
   --methods RawDialogue,MemZero \
+  --limit 5
+```
+
+```powershell
+.\scripts\run_benchmark.ps1 `
+  --tasks objective_fact_judgment `
+  --methods RawDialogue,MemZero `
   --limit 5
 ```
 
