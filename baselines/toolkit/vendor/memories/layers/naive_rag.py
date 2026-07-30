@@ -209,26 +209,25 @@ class NaiveRAGLayer(BaseMemoryLayer):
         """
         In most cases, Qdrant/Chroma persist data on write.
         We still write `config.json` to ensure search phase can rebuild.
-        Also best-effort trigger `persist`/`close` where available.
+        Also best-effort trigger `persist` where available.
+
+        Resource cleanup belongs to the caller that owns this layer. Closing the
+        vector-store client here makes the just-saved layer unusable for the
+        retrieval that immediately follows memory construction.
         """
         try:
             os.makedirs(self.config.save_dir, exist_ok=True)
             self._save_config()
 
-            # Best-effort: trigger underlying persistence (implementation differs by version)
+            # Best-effort: trigger underlying persistence (implementation differs by version).
+            # Do not close the client here: optimized evaluation keeps this layer
+            # alive for retrieval and closes it on cache eviction or process exit.
             vs = getattr(self.memory_layer, "vector_store", None)
-            if vs is not None:
-                if hasattr(vs, "persist"):
-                    try:
-                        vs.persist()
-                    except Exception:
-                        pass
-                client = getattr(vs, "client", None)
-                if client is not None and hasattr(client, "close"):
-                    try:
-                        client.close()
-                    except Exception:
-                        pass
+            if vs is not None and hasattr(vs, "persist"):
+                try:
+                    vs.persist()
+                except Exception:
+                    pass
 
             logger.info(
                 f"NaiveRAG saved config for user {self.config.user_id} at {self.config.save_dir}"
