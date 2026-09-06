@@ -112,8 +112,7 @@ Five representative examples from the released benchmark:
 
 <h2 id="getting-started">🔧 Getting Started</h2>
 
-MemSyco-Bench treats all nine evaluation settings as peers. Integration lives in
-[`baselines/`](baselines/).
+MemSyco-Bench treats all nine evaluation settings as peers. Integration lives in [`baselines/`](baselines/).
 
 ```text
 baselines/             unified interface for all memory baselines and controls
@@ -150,9 +149,7 @@ in editable mode.
 
 <h2 id="running-examples">🚀 Running Examples</h2>
 
-Configure API keys and endpoints (see `./scripts/run_benchmark.sh --help` or
-`.\scripts\run_benchmark.ps1 --help` on Windows PowerShell), then run the
-five-task evaluation suite:
+Copy [`.env.example`](.env.example) to `.env` in the repo root and set API keys, endpoints, models, and thinking flags there. `./scripts/run_benchmark.sh` loads `.env` automatically; CLI flags still override it. See `./scripts/run_benchmark.sh --help` or `.\scripts\run_benchmark.ps1 --help` on Windows PowerShell for the full option list, then run the five-task evaluation suite:
 
 ```bash
 ./scripts/run_benchmark.sh
@@ -180,8 +177,7 @@ Run a small example with one task and two memory settings:
   --limit 5
 ```
 
-The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`,
-`LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the
+The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the
 [Evaluation README](evaluation/README.md) for the unified task runner and the
 [Baselines README](baselines/README.md) for per-method configuration.
 

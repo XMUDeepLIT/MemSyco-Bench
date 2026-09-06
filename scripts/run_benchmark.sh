@@ -13,30 +13,95 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+load_dotenv() {
+  local env_file="$1"
+  local line key value
+  [[ -f "$env_file" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    line="${line#$'\xef\xbb\xbf'}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" == export[[:space:]]* ]]; then
+      line="${line#export}"
+      line="${line#"${line%%[![:space:]]*}"}"
+    fi
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key%"${key##*[![:space:]]}"}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    if [[ -n "${!key+x}" ]]; then
+      continue
+    fi
+    if [[ "$value" != \"* && "$value" != \'* ]]; then
+      value="${value%%#*}"
+      value="${value%"${value##*[![:space:]]}"}"
+    fi
+    if [[ ${#value} -ge 2 ]]; then
+      if [[ "$value" == \"*\" ]]; then
+        value="${value:1:${#value}-2}"
+      elif [[ "$value" == \'*\' ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+    fi
+    export "$key=$value"
+  done < "$env_file"
+  echo "Loaded environment from $env_file"
+}
+
+if [[ -n "${DOTENV_PATH-}" ]]; then
+  load_dotenv "$DOTENV_PATH"
+else
+  load_dotenv "$REPO_ROOT/.env"
+fi
+
 api_env_help() {
   cat <<'EOF'
 API configuration:
+  Values are read from the repo-root .env (copy .env.example), then the process
+  environment, then CLI flags. Already-exported variables are not overwritten
+  by .env. CLI flags still win for that run.
+
   The benchmark uses separate OpenAI-compatible endpoints for answer generation,
-  judging, memory construction, and embeddings. Example:
+  judging, memory construction, and embeddings. Example .env:
 
-    export GENERATION_API_KEY="xxx"
-    export JUDGE_API_KEY="xxx"
-    export MEMORY_API_KEY="xxx"
-    export MEMORY_EMBEDDING_API_KEY="xxx"
+    GENERATION_API_KEY="xxx"
+    JUDGE_API_KEY="xxx"
+    MEMORY_API_KEY="xxx"
+    MEMORY_EMBEDDING_API_KEY="xxx"
 
-    export GENERATION_BASE_URL="https://openrouter.ai/api/v1"
-    export JUDGE_BASE_URL="https://api.deepseek.com"
+    GENERATION_BASE_URL="https://openrouter.ai/api/v1"
+    GENERATION_MODEL="qwen/qwen3-8b"
+    JUDGE_BASE_URL="https://api.deepseek.com"
+    JUDGE_MODEL="deepseek-v4-flash"
 
-    export MEMORY_BASE_URL="https://api.deepseek.com"
-    export MEMORY_LLM_MODEL="deepseek-v4-flash"
+    MEMORY_BASE_URL="https://api.deepseek.com"
+    MEMORY_LLM_MODEL="deepseek-v4-flash"
 
-    export MEMORY_EMBEDDING_MODEL="baai/bge-m3"
-    export MEMORY_EMBEDDING_DIMS="1024"
-    export MEMORY_EMBEDDING_BASE_URL="https://openrouter.ai/api/v1"
+    MEMORY_EMBEDDING_MODEL="baai/bge-m3"
+    MEMORY_EMBEDDING_DIMS="1024"
+    MEMORY_EMBEDDING_BASE_URL="https://openrouter.ai/api/v1"
+
+    GENERATION_ENABLE_THINKING=0
+    JUDGE_ENABLE_THINKING=0
+
+  Thinking:
+    GENERATION_ENABLE_THINKING and JUDGE_ENABLE_THINKING are independent.
+    Each request sends reasoning.enabled (OpenRouter) and thinking.type
+    (DeepSeek official). ENABLE_THINKING is a fallback if a role-specific
+    variable is unset.
 
   Accepted aliases:
     GENERATION_API_KEY / DEEPSEEK_API_KEY / API_KEY
     JUDGE_API_KEY / DEEPSEEK_JUDGE_API_KEY
+    GENERATION_MODEL / GENERATION_MODELS
+    GENERATION_ENABLE_THINKING / GENERATION_THINKING
+    JUDGE_ENABLE_THINKING / JUDGE_THINKING
+    ENABLE_THINKING / THINKING_ENABLED
 
   CLI overrides (per run):
     --base-url URL           generation model base URL
@@ -45,6 +110,10 @@ API configuration:
     --judge-api-key KEY      judge API key
     --model NAME             generation model name
     --judge-model NAME       judge model name
+    --enable-generation-thinking / --disable-generation-thinking
+    --enable-judge-thinking / --disable-judge-thinking
+    --enable-thinking / --disable-thinking
+                             set generation and judge thinking together
 
   Optional baseline-specific variables:
     MEMGPT_MAX_STEPS, MEMGPT_INGEST_BATCH_SIZE, MEMGPT_LANGUAGE
@@ -53,25 +122,28 @@ API configuration:
 EOF
 }
 
+DOTENV_TASKS="${TASKS-}"
+DOTENV_METHODS="${METHODS-}"
+
 TASKS=("personalized_memory_use" "valid_memory_selection" "memory_evidence_conflict" "contextual_scope_control" "objective_fact_judgment")
 METHODS=("NoMemory" "RawDialogue" "MemZero" "A-MEM" "LightMem" "MemoryBank" "NaiveRAG" "MemGPT" "Supermemory")
-LIMIT=20
-WORKERS=1
-OUTER_WORKERS=1
-MEMORY_TOP_K=10
-OUTPUT_ROOT="output_data/runs"
-MEMORY_SAVE_ROOT_BASE="output_data/memory_stores"
+LIMIT="${LIMIT:-20}"
+WORKERS="${WORKERS:-1}"
+OUTER_WORKERS="${OUTER_WORKERS:-1}"
+MEMORY_TOP_K="${MEMORY_TOP_K:-10}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-output_data/runs}"
+MEMORY_SAVE_ROOT_BASE="${MEMORY_SAVE_ROOT_BASE:-output_data/memory_stores}"
 MODELS=("")
 BASE_URL=""
 ARG_API_KEY=""
-JUDGE_MODEL=""
+JUDGE_MODEL="${JUDGE_MODEL-}"
 ARG_JUDGE_BASE_URL=""
 ARG_JUDGE_API_KEY=""
-REQUEST_TIMEOUT=60
-JUDGE_REQUEST_TIMEOUT=60
-API_MAX_RETRIES=1
+REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-60}"
+JUDGE_REQUEST_TIMEOUT="${JUDGE_REQUEST_TIMEOUT:-60}"
+API_MAX_RETRIES="${API_MAX_RETRIES:-1}"
 CURRENT_DATE="${EVAL_CURRENT_DATE-}"
-COMPLETION_CACHE_PATH="output_data/completion_cache/benchmark_completions.sqlite"
+COMPLETION_CACHE_PATH="${COMPLETION_CACHE_PATH:-output_data/completion_cache/benchmark_completions.sqlite}"
 COMPLETION_CACHE_PATH_SET=0
 NO_COMPLETION_CACHE=0
 NO_DISK_COMPLETION_CACHE=0
@@ -79,7 +151,7 @@ NO_QUESTION_FILTER=1
 TRACE_API=0
 CONTINUE_ON_ERROR=0
 DRY_RUN=0
-SCHEDULE_BY="model"
+SCHEDULE_BY="${SCHEDULE_BY:-model}"
 ANSWER_SYSTEM_EXTRA_INSTRUCTION="${ANSWER_SYSTEM_EXTRA_INSTRUCTION-}"
 
 usage() {
@@ -122,6 +194,12 @@ Options:
   --no-disk-completion-cache
   --no-question-filter
   --trace-api
+  --enable-generation-thinking
+  --disable-generation-thinking
+  --enable-judge-thinking
+  --disable-judge-thinking
+  --enable-thinking
+  --disable-thinking
   --answer-system-extra-instruction TEXT
   --continue-on-error
   --dry-run            Print evaluator commands without running them.
@@ -147,6 +225,18 @@ require_value() {
     exit 2
   fi
 }
+
+if [[ -n "$DOTENV_TASKS" ]]; then
+  split_csv "$DOTENV_TASKS" TASKS
+fi
+if [[ -n "$DOTENV_METHODS" ]]; then
+  split_csv "$DOTENV_METHODS" METHODS
+fi
+if [[ -n "${GENERATION_MODELS-}" ]]; then
+  split_csv "$GENERATION_MODELS" MODELS
+elif [[ -n "${GENERATION_MODEL-}" ]]; then
+  split_csv "$GENERATION_MODEL" MODELS
+fi
 
 method_slug() {
   case "$1" in
@@ -376,6 +466,32 @@ while [[ $# -gt 0 ]]; do
       TRACE_API=1
       shift
       ;;
+    --enable-generation-thinking)
+      export GENERATION_ENABLE_THINKING=1
+      shift
+      ;;
+    --disable-generation-thinking)
+      export GENERATION_ENABLE_THINKING=0
+      shift
+      ;;
+    --enable-judge-thinking)
+      export JUDGE_ENABLE_THINKING=1
+      shift
+      ;;
+    --disable-judge-thinking)
+      export JUDGE_ENABLE_THINKING=0
+      shift
+      ;;
+    --enable-thinking)
+      export GENERATION_ENABLE_THINKING=1
+      export JUDGE_ENABLE_THINKING=1
+      shift
+      ;;
+    --disable-thinking)
+      export GENERATION_ENABLE_THINKING=0
+      export JUDGE_ENABLE_THINKING=0
+      shift
+      ;;
     --answer-system-extra-instruction)
       require_value "$1" "${2-}"
       ANSWER_SYSTEM_EXTRA_INSTRUCTION="$2"
@@ -406,8 +522,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
 OLD_PYTHONPATH="${PYTHONPATH-}"

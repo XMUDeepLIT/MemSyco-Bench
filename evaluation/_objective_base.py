@@ -52,6 +52,8 @@ from openai import (
     RateLimitError,
 )
 from _dataset_compat import to_eval_row
+from _llm_extra_body import chat_extra_body, thinking_role_from_purpose
+from _paper_metrics import attach_paper_metrics, paper_secondary_summary
 from tqdm import tqdm
 
 
@@ -71,8 +73,12 @@ OUTPUT_RESULTS_JSON = (
     / "objective_fact_judgment_results.json"
 )
 
-DEFAULT_MODEL_NAME = "deepseek-v4-flash"
-DEFAULT_JUDGE_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_MODEL_NAME = (
+    os.environ.get("GENERATION_MODEL")
+    or os.environ.get("MODEL")
+    or "deepseek-v4-flash"
+)
+DEFAULT_JUDGE_MODEL_NAME = os.environ.get("JUDGE_MODEL") or "deepseek-v4-flash"
 DEFAULT_GENERATION_BASE_URL = (
     os.environ.get("GENERATION_BASE_URL") or "https://api.deepseek.com"
 )
@@ -595,11 +601,7 @@ def _chat_answer(
                     {"role": "user", "content": user_msg},
                 ],
                 temperature=temperature,
-                extra_body={
-                    "reasoning": {"enabled": False},
-                    # "thinking": {"type": "disabled"},
-                    # "thinking": {"type": "disabled"},
-                },
+                extra_body=chat_extra_body(thinking_role_from_purpose(cache_purpose)),
             )
             text = (resp.choices[0].message.content or "").strip()
             if API_HTTP_TRACE_ENABLED:
@@ -1330,11 +1332,13 @@ def main() -> None:
         final_results.append(result)
 
     metrics = aggregate_metrics(final_results)
+    paper_metrics = attach_paper_metrics("objective_fact_judgment", metrics)
     cache_meta = completion_cache.stats() if completion_cache is not None else {
         "enabled": False}
     payload = {
         "task": "objective",
         "eval_mode": "open_ended_objective_v2",
+        "paper_metrics": paper_metrics,
         "model": args.model,
         "judge_model": args.judge_model,
         "base_url": args.base_url,
@@ -1410,6 +1414,7 @@ def main() -> None:
             f"no_memory: correctness={nm['objective_correctness_avg']:.4f}, "
             f"contamination={nm['preference_contamination_avg']:.4f}, "
             f"suppress_pass={nm['suppress_pass_avg']:.4f}"
+            f"{paper_secondary_summary(paper_metrics, 'no_memory')}"
         )
     else:
         summary_lines.append("no_memory: skipped")
@@ -1418,6 +1423,7 @@ def main() -> None:
             f"with_memory: correctness={wm['objective_correctness_avg']:.4f}, "
             f"contamination={wm['preference_contamination_avg']:.4f}, "
             f"suppress_pass={wm['suppress_pass_avg']:.4f}"
+            f"{paper_secondary_summary(paper_metrics, 'with_memory')}"
         )
     else:
         summary_lines.append("with_memory: skipped")

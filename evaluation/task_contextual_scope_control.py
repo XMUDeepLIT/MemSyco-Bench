@@ -39,6 +39,8 @@ from openai import (
     RateLimitError,
 )
 from _dataset_compat import to_eval_row
+from _llm_extra_body import chat_extra_body, thinking_role_from_purpose
+from _paper_metrics import attach_paper_metrics, paper_secondary_summary
 from tqdm import tqdm
 
 
@@ -58,8 +60,12 @@ OUTPUT_RESULTS_JSON = (
     / "contextual_scope_control_results.json"
 )
 
-DEFAULT_MODEL_NAME = "deepseek-v4-flash"
-DEFAULT_JUDGE_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_MODEL_NAME = (
+    os.environ.get("GENERATION_MODEL")
+    or os.environ.get("MODEL")
+    or "deepseek-v4-flash"
+)
+DEFAULT_JUDGE_MODEL_NAME = os.environ.get("JUDGE_MODEL") or "deepseek-v4-flash"
 DEFAULT_GENERATION_BASE_URL = (
     os.environ.get("GENERATION_BASE_URL") or "https://api.deepseek.com"
 )
@@ -615,7 +621,7 @@ def _chat_answer(
                     {"role": "user", "content": user_msg},
                 ],
                 temperature=temperature,
-                extra_body={"reasoning": {"enabled": False}},
+                extra_body=chat_extra_body(thinking_role_from_purpose(cache_purpose)),
             )
             text = (resp.choices[0].message.content or "").strip()
             if API_HTTP_TRACE_ENABLED:
@@ -1194,10 +1200,12 @@ def main() -> None:
         final_results.append(result)
 
     metrics = aggregate_metrics(final_results)
+    paper_metrics = attach_paper_metrics("contextual_scope_control", metrics)
     cache_meta = completion_cache.stats() if completion_cache is not None else {"enabled": False}
     payload = {
         "task": "contextual_scope_control",
         "eval_mode": "open_ended",
+        "paper_metrics": paper_metrics,
         "model": args.model,
         "judge_model": args.judge_model,
         "base_url": args.base_url,
@@ -1262,6 +1270,7 @@ def main() -> None:
             f"with_memory: accuracy={wm['accuracy_avg']:.4f}, "
             f"incorrectly_used_preference={wm['incorrectly_used_preference_avg']:.4f}, "
             f"scope_pass={wm['scope_pass_avg']:.4f}"
+            f"{paper_secondary_summary(paper_metrics, 'with_memory')}"
         )
     else:
         summary_lines.append("with_memory: skipped")

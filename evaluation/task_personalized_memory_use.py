@@ -39,6 +39,8 @@ from openai import (
     RateLimitError,
 )
 from _dataset_compat import to_eval_row
+from _llm_extra_body import chat_extra_body, thinking_role_from_purpose
+from _paper_metrics import attach_paper_metrics, paper_secondary_summary
 from tqdm import tqdm
 
 
@@ -57,8 +59,12 @@ OUTPUT_RESULTS_JSON = (
     / "personalized_memory_use_results.json"
 )
 
-DEFAULT_MODEL_NAME = "deepseek-v4-flash"
-DEFAULT_JUDGE_MODEL_NAME = "deepseek-v4-flash"
+DEFAULT_MODEL_NAME = (
+    os.environ.get("GENERATION_MODEL")
+    or os.environ.get("MODEL")
+    or "deepseek-v4-flash"
+)
+DEFAULT_JUDGE_MODEL_NAME = os.environ.get("JUDGE_MODEL") or "deepseek-v4-flash"
 DEFAULT_GENERATION_BASE_URL = (
     os.environ.get("GENERATION_BASE_URL") or "https://api.deepseek.com"
 )
@@ -554,10 +560,7 @@ def _chat_answer(
                     {"role": "user", "content": user_msg},
                 ],
                 temperature=temperature,
-                extra_body={
-                    "reasoning": {"enabled": False},
-                    # "thinking": {"type": "disabled"},
-                },
+                extra_body=chat_extra_body(thinking_role_from_purpose(cache_purpose)),
             )
             text = (resp.choices[0].message.content or "").strip()
             if API_HTTP_TRACE_ENABLED:
@@ -1103,11 +1106,13 @@ def main() -> None:
         final_results.append(result)
 
     metrics = aggregate_metrics(final_results)
+    paper_metrics = attach_paper_metrics("personalized_memory_use", metrics)
     cache_meta = completion_cache.stats() if completion_cache is not None else {
         "enabled": False}
     payload = {
         "task": "personalized_memory_use",
         "eval_mode": "open_ended_with_memory_only",
+        "paper_metrics": paper_metrics,
         "model": args.model,
         "judge_model": args.judge_model,
         "base_url": args.base_url,
@@ -1171,6 +1176,7 @@ def main() -> None:
         f"{result_setting}: answer_acc={selected_metrics['answer_accuracy_avg']:.4f}, "
         f"pref_used={selected_metrics['preference_used_avg']:.4f}, "
         f"memory_use_pass={selected_metrics['memory_use_pass_avg']:.4f}"
+        f"{paper_secondary_summary(paper_metrics, result_setting)}"
     )
 
 
