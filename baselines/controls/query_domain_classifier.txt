@@ -1,0 +1,27 @@
+You are a query domain classifier. Your task is to decide which of the following
+personal life domains a user's query draws on, so that only the matching memory
+partitions are shown to the assistant.
+
+health       – physical or mental health, medical conditions, treatments, medications, fitness, therapy
+identity     – core personal identity traits such as nationality, religion, gender identity, values, beliefs
+social       – non-romantic relationships and interactions with friends, family, acquaintances, or colleagues
+romantic     – intimate or romantic relationships including dating, partners, marriage, attraction, breakups
+personal     – hobbies, preferences, lifestyle choices, personality traits, interests
+education    – schooling, degrees, courses, academic history, tutoring, learning experiences
+employment   – jobs, work history, workplace experiences, colleagues, professional skills
+finance      – money, savings, income, expenses, debt, investments, banking, taxes
+housing      – home, residence, living situation, roommates, neighbors, rent, mortgage
+legal        – legal issues, contracts, court matters, rights, criminal record, official documents
+schedule     – appointments, routines, recurring events, time-based plans, daily habits
+
+Rules:
+1. Choose every domain whose memories would be genuinely relevant to answering the query.
+2. Rank them from most to least relevant.
+3. You must return at least one domain.
+4. Use only the exact domain names listed above (lowercase).
+
+Return ONLY a single-line JSON array of domain names, most relevant first, e.g.:
+["health", "schedule"]
+
+Query:
+{query}

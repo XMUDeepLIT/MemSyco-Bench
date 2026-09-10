@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from . import amem, lightmem, memgpt, memorybank, memzero, naive_rag, supermemory
+from . import amem, lightmem, memgpt, memorybank, memzero, memzero_controls, naive_rag, supermemory
 from .base import BaselineContext, BaselineEvalConfig
 
 
@@ -13,6 +13,9 @@ _BUILDERS = {
     naive_rag.METHOD: naive_rag.build_context,
     amem.METHOD: amem.build_context,
     "MemZero": memzero.build_context,
+    memzero_controls.METHOD_SELF_RECHECK: memzero_controls.build_context,
+    memzero_controls.METHOD_MEMGATE: memzero_controls.build_context,
+    memzero_controls.METHOD_DYN_PARTITION: memzero_controls.build_context,
     memorybank.METHOD: memorybank.build_context,
     supermemory.METHOD: supermemory.build_context,
     memgpt.METHOD: memgpt.build_context,

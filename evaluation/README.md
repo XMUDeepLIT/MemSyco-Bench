@@ -33,3 +33,8 @@ Validate the complete task matrix without sending API requests:
 ```bash
 ./scripts/run_benchmark.sh --dry-run --methods RawDialogue --limit 1
 ```
+
+Three extra methods reuse a MemZero store and filter retrieved memories:
+`MemZero+SelfReCheck`, `MemZero+MemGate`, and `MemZero+DynPartition`. They are
+not in the default `--methods` list. MemGate needs
+`./scripts/fetch_memgate_checkpoint.sh` first; see [Baselines README](../baselines/README.md).

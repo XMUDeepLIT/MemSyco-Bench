@@ -63,6 +63,7 @@ def build_baseline_eval_config(
             _env_value(data.get("base_url_env")),
             data.get("base_url"),
         ),
+        options=_control_options(data),
     )
 
 
@@ -79,6 +80,15 @@ def _load_config(method: str, baseline_config_path: Path | None) -> dict[str, An
     if config_method and config_method != method:
         raise ValueError(f"Baseline config method mismatch: expected {method!r}, got {config_method!r}")
     return data
+
+
+def _control_options(data: dict[str, Any]) -> dict[str, Any]:
+    raw = data.get("control")
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError("Baseline config 'control' must be a JSON object")
+    return dict(raw)
 
 
 def _optional_path(value: Any) -> Path | None:

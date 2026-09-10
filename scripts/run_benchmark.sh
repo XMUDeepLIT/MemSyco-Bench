@@ -5,6 +5,7 @@
 #   ./scripts/run_benchmark.sh
 #   ./scripts/run_benchmark.sh --limit 5 --trace-api
 #   ./scripts/run_benchmark.sh --tasks objective_fact_judgment --methods RawDialogue,MemZero --limit 50
+#   ./scripts/run_benchmark.sh --methods MemZero+SelfReCheck,MemZero+MemGate,MemZero+DynPartition --tasks objective_fact_judgment --limit 5
 #   ./scripts/run_benchmark.sh --limit 0
 #
 # Limit:
@@ -163,6 +164,9 @@ usage() {
 Options:
   --tasks personalized_memory_use,valid_memory_selection,memory_evidence_conflict,contextual_scope_control,objective_fact_judgment
   --methods NoMemory,RawDialogue,MemZero,A-MEM,LightMem,MemoryBank,NaiveRAG,MemGPT,Supermemory
+                     Extra (not in the default nine): MemZero+SelfReCheck,
+                     MemZero+MemGate, MemZero+DynPartition. These reuse the
+                     MemZero store and apply a post-retrieval control.
   --limit N
   --workers N  Accepted for compatibility; optimized evaluators force workers=1.
   --outer-workers N  Run up to N task/method/model combinations concurrently.
@@ -243,6 +247,9 @@ method_slug() {
     NoMemory) echo "no_memory" ;;
     RawDialogue) echo "raw_dialogue" ;;
     MemZero) echo "memzero" ;;
+    MemZero+SelfReCheck) echo "memzero_self_recheck" ;;
+    MemZero+MemGate) echo "memzero_memgate" ;;
+    MemZero+DynPartition) echo "memzero_dyn_partition" ;;
     NaiveRAG) echo "naive_rag" ;;
     A-MEM) echo "amem" ;;
     LightMem) echo "lightmem" ;;
@@ -255,6 +262,21 @@ method_slug() {
         | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//'
       ;;
   esac
+}
+
+is_memzero_control_method() {
+  case "$1" in
+    MemZero+SelfReCheck|MemZero+MemGate|MemZero+DynPartition) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+construction_method_slug() {
+  if is_memzero_control_method "$1"; then
+    echo "memzero"
+  else
+    method_slug "$1"
+  fi
 }
 
 is_no_memory_method() {
@@ -279,7 +301,7 @@ memory_store_slot_key() {
   if ! is_disk_memory_method "$method"; then
     return 0
   fi
-  printf '%s_%s' "$task_slug" "$(method_slug "$method")"
+  printf '%s_%s' "$task_slug" "$(construction_method_slug "$method")"
 }
 
 raw_dialogue_needs_with_memory_only_flag() {
@@ -680,20 +702,21 @@ run_eval_job() {
   local method="$7"
   local model="$8"
 
-  local method_slug model_slug task_output_dir output_path memory_save_root job_cache_path
+  local method_slug construction_slug model_slug task_output_dir output_path memory_save_root job_cache_path
   local lock_dir=""
   method_slug="$(method_slug "$method")"
+  construction_slug="$(construction_method_slug "$method")"
   model_slug="$(model_slug "$model")"
   task_output_dir="$OUTPUT_ROOT/$task_slug"
   output_path="$task_output_dir/${method_slug}_${model_slug}_$output_suffix"
-  memory_save_root="$MEMORY_SAVE_ROOT_BASE/$task_slug/$method_slug"
+  memory_save_root="$MEMORY_SAVE_ROOT_BASE/$task_slug/$construction_slug"
   job_cache_path="$(job_completion_cache_path "$task_slug" "$method_slug" "$model_slug")"
 
   mkdir -p "$task_output_dir"
   if is_disk_memory_method "$method"; then
     mkdir -p "$memory_save_root"
     mkdir -p "$MEMORY_SAVE_ROOT_BASE/.outer_locks"
-    lock_dir="$MEMORY_SAVE_ROOT_BASE/.outer_locks/${task_slug}_${method_slug}.lock"
+    lock_dir="$MEMORY_SAVE_ROOT_BASE/.outer_locks/${task_slug}_${construction_slug}.lock"
   fi
   if [[ -n "$job_cache_path" ]]; then
     mkdir -p "$(dirname "$job_cache_path")"

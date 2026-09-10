@@ -27,7 +27,9 @@ if str(REPO_ROOT) not in sys.path:
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from baselines import BaselineContext, BaselineEvalConfig
+from baselines.base import BaselineContext, BaselineEvalConfig
+from baselines.controls import is_memzero_control_method
+from baselines.memzero_controls import memzero_construction_config
 from baselines.common import (
     format_retrieved_memories,
     jsonable_memories,
@@ -418,7 +420,9 @@ def _cache_max_entries(eval_config: BaselineEvalConfig) -> int | None:
         return None if value <= 0 else value
     if eval_config.method in _NATIVE_LIGHTMEM_METHODS:
         return _DEFAULT_NATIVE_CACHE_MAX_ENTRIES
-    if eval_config.method in _DISK_QDRANT_TOOLKIT_METHODS:
+    if eval_config.method in _DISK_QDRANT_TOOLKIT_METHODS or is_memzero_control_method(
+        eval_config.method
+    ):
         return _DEFAULT_TOOLKIT_CACHE_MAX_ENTRIES
     return None
 
@@ -726,7 +730,14 @@ def build_cached_baseline_context(
     *,
     sample_key: str | int | None = None,
 ) -> BaselineContext:
-    if eval_config.method not in _TOOLKIT_METHODS and eval_config.method not in _NATIVE_LIGHTMEM_METHODS:
+    control_method = eval_config.method if is_memzero_control_method(eval_config.method) else None
+    construction_config = (
+        memzero_construction_config(eval_config) if control_method else eval_config
+    )
+    if (
+        construction_config.method not in _TOOLKIT_METHODS
+        and construction_config.method not in _NATIVE_LIGHTMEM_METHODS
+    ):
         from baselines.registry import build_baseline_context
 
         return build_baseline_context(
@@ -737,12 +748,22 @@ def build_cached_baseline_context(
         )
 
     messages, digest = _parse_full_context(prior_dialogue)
-    entry = _get_entry(messages, eval_config, digest=digest)
+    entry = _get_entry(messages, construction_config, digest=digest)
     retrieved = (
         _retrieve_from_entry(entry, user_question, eval_config.top_k)
         if entry is not None
         else []
     )
+    if control_method:
+        from baselines.controls import apply_memzero_control
+
+        retrieved = apply_memzero_control(
+            control_method,
+            user_question,
+            retrieved,
+            eval_config,
+            layer=entry.layer if entry is not None else None,
+        )
 
     return BaselineContext(
         context_text=format_retrieved_memories(retrieved),

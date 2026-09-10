@@ -177,7 +177,7 @@ Run a small example with one task and two memory settings:
   --limit 5
 ```
 
-The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. See the
+The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`, `A-MEM`, `LightMem`, `MemoryBank`, `NaiveRAG`, `MemGPT`, and `Supermemory`. Three extra post-retrieval MemZero controls (`MemZero+SelfReCheck`, `MemZero+MemGate`, `MemZero+DynPartition`) are registered but not in that default list; see [Baselines README](baselines/README.md). See the
 [Evaluation README](evaluation/README.md) for the unified task runner and the
 [Baselines README](baselines/README.md) for per-method configuration.
 
