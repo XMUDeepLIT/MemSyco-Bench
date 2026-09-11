@@ -170,10 +170,11 @@ Options:
   --limit N
   --workers N  Accepted for compatibility; optimized evaluators force workers=1.
   --outer-workers N  Run up to N task/method/model combinations concurrently.
-                     For disk-backed memory baselines, at most one model runs per
-                     task/method at a time so a shared memory store is never read
-                     by multiple processes. A file lock under --memory-save-root-base
-                     also blocks concurrent runs from other shell invocations.
+                     Jobs that share a disk memory store (same task + construction
+                     method, e.g. MemZero and MemZero+MemGate) are serialized.
+                     Other ready jobs still fill the worker pool. A file lock
+                     under --memory-save-root-base also blocks concurrent runs
+                     from other shell invocations.
   --schedule-by model|task
                      Job submission order (default: model).
                      model: iterate model -> task -> method so all tasks for one
@@ -644,24 +645,9 @@ wait_for_one_job() {
   running_jobs=$((running_jobs - 1))
 }
 
-wait_for_job_slot() {
-  while (( running_jobs >= OUTER_WORKERS )); do
-    wait_for_one_job
-  done
-}
-
-wait_for_memory_store_slot() {
+memory_store_slot_busy() {
   local slot_key="$1"
-  [[ -z "$slot_key" ]] && return 0
-
-  while [[ -n "${MEMORY_STORE_SLOTS_ACTIVE[$slot_key]+x}" ]]; do
-    if (( running_jobs <= 0 )); then
-      echo "Internal error: memory store slot '$slot_key' is active but no jobs are running." >&2
-      exit 1
-    fi
-    echo "Waiting for memory store slot: $slot_key (one model per task/method)" >&2
-    wait_for_one_job
-  done
+  [[ -n "$slot_key" && -n "${MEMORY_STORE_SLOTS_ACTIVE[$slot_key]+x}" ]]
 }
 
 wait_for_all_jobs() {
@@ -884,9 +870,6 @@ schedule_eval_job() {
 
   local memory_slot_key
   memory_slot_key="$(memory_store_slot_key "$TASK_SLUG" "$method")"
-
-  wait_for_job_slot
-  wait_for_memory_store_slot "$memory_slot_key"
   if [[ -n "$memory_slot_key" ]]; then
     MEMORY_STORE_SLOTS_ACTIVE[$memory_slot_key]=1
   fi
@@ -909,11 +892,21 @@ for task_name in "${TASKS[@]}"; do
   validate_task_inputs "$task_name"
 done
 
+PENDING_TASKS=()
+PENDING_METHODS=()
+PENDING_MODELS=()
+
+enqueue_eval_job() {
+  PENDING_TASKS+=("$1")
+  PENDING_METHODS+=("$2")
+  PENDING_MODELS+=("$3")
+}
+
 if [[ "$SCHEDULE_BY" == "model" ]]; then
   for model in "${MODELS[@]}"; do
     for task_name in "${TASKS[@]}"; do
       for method in "${METHODS[@]}"; do
-        schedule_eval_job "$task_name" "$method" "$model"
+        enqueue_eval_job "$task_name" "$method" "$model"
       done
     done
   done
@@ -921,11 +914,60 @@ else
   for task_name in "${TASKS[@]}"; do
     for method in "${METHODS[@]}"; do
       for model in "${MODELS[@]}"; do
-        schedule_eval_job "$task_name" "$method" "$model"
+        enqueue_eval_job "$task_name" "$method" "$model"
       done
     done
   done
 fi
+
+while (( ${#PENDING_TASKS[@]} > 0 )); do
+  local_new_tasks=()
+  local_new_methods=()
+  local_new_models=()
+  launched_this_round=0
+
+  for i in "${!PENDING_TASKS[@]}"; do
+    task_name="${PENDING_TASKS[$i]}"
+    method="${PENDING_METHODS[$i]}"
+    model="${PENDING_MODELS[$i]}"
+
+    task_spec "$task_name"
+    if is_no_memory_method "$method" && ! supports_no_memory_task "$task_name"; then
+      echo "Skipping NoMemory for task=$task_name: no-memory is only meaningful for objective_fact_judgment." >&2
+      continue
+    fi
+
+    memory_slot_key="$(memory_store_slot_key "$TASK_SLUG" "$method")"
+    if (( running_jobs >= OUTER_WORKERS )) || memory_store_slot_busy "$memory_slot_key"; then
+      local_new_tasks+=("$task_name")
+      local_new_methods+=("$method")
+      local_new_models+=("$model")
+      continue
+    fi
+
+    schedule_eval_job "$task_name" "$method" "$model"
+    launched_this_round=1
+  done
+
+  if (( ${#local_new_tasks[@]} > 0 )); then
+    PENDING_TASKS=("${local_new_tasks[@]}")
+    PENDING_METHODS=("${local_new_methods[@]}")
+    PENDING_MODELS=("${local_new_models[@]}")
+  else
+    PENDING_TASKS=()
+    PENDING_METHODS=()
+    PENDING_MODELS=()
+  fi
+
+  if (( ${#PENDING_TASKS[@]} > 0 && launched_this_round == 0 )); then
+    if (( running_jobs <= 0 )); then
+      echo "Internal error: pending evaluation jobs cannot start." >&2
+      exit 1
+    fi
+    echo "Waiting for a free outer-worker or memory-store slot ($running_jobs running, ${#PENDING_TASKS[@]} pending)" >&2
+    wait_for_one_job
+  fi
+done
 
 wait_for_all_jobs
 
