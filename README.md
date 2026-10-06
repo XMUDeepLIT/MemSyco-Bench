@@ -1,4 +1,4 @@
-# MemSyco-Bench
+# MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
 
 <div align="center">
     <a href="https://arxiv.org/abs/2607.01071" target="_blank"><img src="https://img.shields.io/badge/Paper-Arxiv-red?logo=arxiv&style=flat-square" alt="arXiv:2607.01071"></a>
