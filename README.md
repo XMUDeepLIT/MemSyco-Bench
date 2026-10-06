@@ -1,7 +1,6 @@
 # MemSyco-Bench
 
 <div align="center">
-    <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-green.svg"/></a>
     <a href="https://arxiv.org/abs/2607.01071" target="_blank"><img src="https://img.shields.io/badge/Paper-Arxiv-red?logo=arxiv&style=flat-square" alt="arXiv:2607.01071"></a>
     <a href="https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/"><img src="https://img.shields.io/badge/leaderboard-steelblue?logo=googlechrome&logoColor=white" alt="Leaderboard"></a>
     <a href="https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-teal" alt="MIT License"></a>
