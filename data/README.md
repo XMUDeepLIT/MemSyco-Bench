@@ -103,3 +103,9 @@ A model under evaluation should receive only the condition-specific context and 
 ## Schema
 
 The current release uses schema version `1.2` with five canonical task identifiers and open-ended LLM-judged evaluation. Dialogue turns use lowercase `role` values (`user`, `assistant`) and plain `content` without duplicated speaker prefixes.
+
+## 📄 License
+
+Unless otherwise noted, the data files in this directory are released under the MIT License, consistent with the repository-level LICENSE.
+
+Some examples are derived from third-party datasets and remain subject to their original licenses and attribution requirements. In particular, Objective Fact Judgment examples derived from TruthfulQA retain the applicable TruthfulQA attribution and license information.

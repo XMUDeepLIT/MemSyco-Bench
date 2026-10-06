@@ -1,22 +1,37 @@
+# MemSyco-Bench
+
 <div align="center">
-
-# MemSyco-Bench: Benchmarking Sycophancy in Agent Memory
-
-[![Static Badge](https://img.shields.io/badge/arxiv-2607.01071-ff0000?style=for-the-badge&labelColor=000)](https://arxiv.org/pdf/2607.01071) [![Static Badge](https://img.shields.io/badge/leaderboard-steelblue?style=for-the-badge&logo=googlechrome&logoColor=ffffff)](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/)  [![Static Badge](https://img.shields.io/badge/license-mit-teal?style=for-the-badge&labelColor=000)](https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE)
-
-<p>
-  <a href="#about" style="text-decoration: none; font-weight: bold;">📖 About</a> ·
-  <a href="#leaderboards" style="text-decoration: none; font-weight: bold;">🏆 Leaderboards</a> ·
-  <a href="#task-examples" style="text-decoration: none; font-weight: bold;">🧩 Task Examples</a>
-</p>
-<p>
-  <a href="#getting-started" style="text-decoration: none; font-weight: bold;">🔧 Getting Started</a> ·
-  <a href="#contribution--contact" style="text-decoration: none; font-weight: bold;">📬 Contact</a> ·
-  <a href="#citation" style="text-decoration: none; font-weight: bold;">📑 Citation</a> ·
-  <a href="#stars" style="text-decoration: none; font-weight: bold;">⭐ Stars History</a>
-</p>
-
+    <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-green.svg"/></a>
+    <a href="https://arxiv.org/abs/2607.01071" target="_blank"><img src="https://img.shields.io/badge/Paper-Arxiv-red?logo=arxiv&style=flat-square" alt="arXiv:2607.01071"></a>
+    <a href="https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/"><img src="https://img.shields.io/badge/leaderboard-steelblue?logo=googlechrome&logoColor=white" alt="Leaderboard"></a>
+    <a href="https://github.com/XMUDeepLIT/MemSyco-Bench/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-teal" alt="MIT License"></a>
+    <a href="https://github.com/XMUDeepLIT/MemSyco-Bench"><img src="https://img.shields.io/github/stars/XMUDeepLIT/MemSyco-Bench"/></a>
 </div>
+
+This repository provides the code, data, and evaluation pipeline for **MemSyco-Bench**, a benchmark of memory-induced sycophancy in LLM agents. It includes contents from our paper 📖<em>"[**MemSyco-Bench: Benchmarking Sycophancy in Agent Memory**](https://arxiv.org/abs/2607.01071)"</em> and will be continuously updated.
+
+🤗 **You're very welcome to contribute to this repository**. If you find issues in the benchmark, evaluation code, or baselines, or come across interesting new memory systems to compare, please don’t hesitate to launch an issue or submit a pull request!
+
+📫 **Contact us via emails:** `{xiangzhishang,chenzerui}@stu.xmu.edu.cn`, `qinggangzhang@jlu.edu.cn`
+
+**📃 Please cite our paper** if you find MemSyco-Bench helpful!
+
+
+```
+@article{xiang2026memsyco,
+  title={MemSyco-Bench: Benchmarking Sycophancy in Agent Memory},
+  author={Xiang, Zhishang and Chen, Zerui and Tang, Yunbo and Wei, Zhimin and Ning, Ruqin and Lin, Yujie and Zhang, Qinggang and Su, Jinsong},
+  journal={arXiv preprint arXiv:2607.01071},
+  year={2026}
+}
+```
+
+---
+
+<h2 id="news">🎉 News</h2>
+
+- **[2026-09]** MemSyco-Bench is accepted by NeurIPS 2026 Workshop PALM!
+- **[2026-07]** We release [MemSyco-Bench](https://arxiv.org/abs/2607.01071), with [code](https://github.com/XMUDeepLIT/MemSyco-Bench), [data](https://huggingface.co/datasets/MemSyco-Bench/MemSyco-Bench), and a [leaderboard](https://xmudeeplit.github.io/MemSyco-Bench-Leaderboard/).
 
 <h2 id="about">📖 About</h2>
 
@@ -182,17 +197,3 @@ The default driver runs nine peer settings: `NoMemory`, `RawDialogue`, `MemZero`
 [Baselines README](baselines/README.md) for per-method configuration.
 
 All generated results, completion caches, memory stores, and logs are written under `output_data/`, which is intentionally ignored by Git.
-
-<h2 id="citation">🍀 Citation</h2>
-
-If you find MemSyco-Bench helpful, please cite the repository. The paper citation will be added after release.
-
-```bibtex
-@article{xiang2026memsyco,
-  title={MemSyco-Bench: Benchmarking Sycophancy in Agent Memory},
-  author={Xiang, Zhishang and Chen, Zerui and Tang, Yunbo and Wei, Zhimin and Ning, Ruqin and Lin, Yujie and Zhang, Qinggang and Su, Jinsong},
-  journal={arXiv preprint arXiv:2607.01071},
-  year={2026}
-}
-```
-
